@@ -1,0 +1,17 @@
+# Core LangChain and LangGraph dependencies
+langchain==0.1.0
+langchain-openai==0.0.2
+langgraph==0.0.20
+
+# Vector store and embeddings
+faiss-cpu==1.7.4
+tiktoken==0.5.2
+
+# Document processing
+markdown==3.5.1
+
+# AWS Lambda compatibility (optional, for local testing)
+boto3==1.34.20
+
+# For production deployment - these will be included in Lambda layer
+# Keep versions compatible with AWS Lambda Python 3.11 runtime

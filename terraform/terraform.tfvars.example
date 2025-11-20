@@ -1,0 +1,16 @@
+# Terraform Variables Configuration
+# Copy this file to terraform.tfvars and fill in your values
+
+# AWS Configuration
+aws_region  = "us-east-1"
+environment = "prod"
+
+# Project Configuration
+project_name = "virtual-me-chatbot"
+
+# OpenAI Configuration
+# Get your API key from: https://platform.openai.com/api-keys
+openai_api_key = "sk-proj-xxxxxxxxxxxxxxxxxxxxx"
+
+# Logging Configuration
+log_retention_days = 7

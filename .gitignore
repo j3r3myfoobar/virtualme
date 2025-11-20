@@ -205,3 +205,27 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Virtual Me Project Specific
+# Deployment artifacts
+deployment.zip
+package/
+response.json
+output.json
+outputs.json
+
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfvars
+!terraform/terraform.tfvars.example
+terraform/tfplan
+
+# LocalStack
+volume/
+
+# IDE
+.vscode/
+.idea/

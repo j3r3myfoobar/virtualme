@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Me - AI Clone Chatbot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            max-width: 800px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 800px;
+            height: 600px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .status-indicator {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            padding: 8px 16px;
+            background: rgba(16, 185, 129, 0.9);
+            color: white;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            color: white;
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .footer a {
+            color: white;
+            text-decoration: underline;
+        }
+
+        /* Deep Chat Custom Styling */
+        deep-chat {
+            width: 100%;
+            height: 100%;
+            border-radius: 20px;
+        }
+
+        .example-questions {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 15px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        .example-questions h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .example-questions ul {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+        }
+
+        .example-questions li {
+            background: #f3f4f6;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9em;
+            color: #374151;
+        }
+
+        .example-questions li:hover {
+            background: #667eea;
+            color: white;
+            transform: translateX(5px);
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .chat-container {
+                height: 500px;
+            }
+
+            .example-questions ul {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🤖 Virtual Me - AI Clone</h1>
+        <p>
+            Ask me anything about my professional experience, skills, education, or projects.
+            I'm powered by RAG (Retrieval Augmented Generation) to provide accurate answers based on my resume.
+        </p>
+    </div>
+
+    <div class="chat-container">
+        <div class="status-indicator">
+            <div class="status-dot"></div>
+            <span>AI Ready</span>
+        </div>
+        <deep-chat
+            id="chat"
+            style="border-radius: 20px"
+            request='{"url": "API_ENDPOINT_PLACEHOLDER"}'
+            requestBodyLimits='{"maxMessages": -1}'
+            messageStyles='{
+                "default": {
+                    "shared": {
+                        "bubble": {
+                            "maxWidth": "80%",
+                            "borderRadius": "15px",
+                            "padding": "12px 16px",
+                            "fontSize": "0.95em"
+                        }
+                    },
+                    "user": {
+                        "bubble": {
+                            "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                            "color": "white"
+                        }
+                    },
+                    "ai": {
+                        "bubble": {
+                            "background": "#f3f4f6",
+                            "color": "#1f2937"
+                        }
+                    }
+                },
+                "loading": {
+                    "bubble": {
+                        "background": "#e5e7eb",
+                        "color": "#6b7280"
+                    }
+                }
+            }'
+            textInput='{
+                "styles": {
+                    "container": {
+                        "borderRadius": "25px",
+                        "border": "2px solid #e5e7eb",
+                        "padding": "10px 20px"
+                    },
+                    "text": {
+                        "fontSize": "0.95em",
+                        "padding": "10px"
+                    }
+                },
+                "placeholder": {
+                    "text": "Ask me anything about my experience, skills, or background..."
+                }
+            }'
+            submitButtonStyles='{
+                "submit": {
+                    "container": {
+                        "default": {
+                            "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                            "borderRadius": "50%",
+                            "padding": "10px"
+                        }
+                    },
+                    "svg": {
+                        "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?><svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M2,21L23,12L2,3V10L17,12L2,14V21Z\" fill=\"white\"/></svg>",
+                        "styles": {
+                            "default": {
+                                "width": "1.3em",
+                                "height": "1.3em"
+                            }
+                        }
+                    }
+                }
+            }'
+            introMessage='{
+                "text": "👋 Hi! I am an AI-powered virtual clone. I can answer questions about my professional experience, technical skills, education, projects, and career background. Feel free to ask me anything!"
+            }'
+            initialMessages='[
+                {
+                    "role": "ai",
+                    "text": "👋 Hi! I am an AI-powered virtual clone. I can answer questions about my professional experience, technical skills, education, projects, and career background. Feel free to ask me anything!"
+                }
+            ]'
+        ></deep-chat>
+    </div>
+
+    <div class="example-questions">
+        <h3>💡 Try asking me:</h3>
+        <ul>
+            <li onclick="sendQuestion(this)">What is your main area of expertise?</li>
+            <li onclick="sendQuestion(this)">Tell me about your experience with AWS and serverless</li>
+            <li onclick="sendQuestion(this)">What AI/ML projects have you worked on?</li>
+            <li onclick="sendQuestion(this)">What certifications do you have?</li>
+            <li onclick="sendQuestion(this)">Where did you study and what did you major in?</li>
+            <li onclick="sendQuestion(this)">What programming languages are you proficient in?</li>
+        </ul>
+    </div>
+
+    <div class="footer">
+        <p>Powered by OpenAI GPT-4o-mini + LangChain + FAISS | Built with ❤️ using AWS Lambda & LangGraph</p>
+    </div>
+
+    <!-- Deep Chat Web Component -->
+    <script type="module" src="https://cdn.jsdelivr.net/npm/deep-chat@latest/dist/deepChat.bundle.js"></script>
+
+    <script>
+        // Configuration - Replace with your actual API Gateway endpoint
+        const API_ENDPOINT = 'API_ENDPOINT_PLACEHOLDER';
+
+        // Initialize the chat component
+        const chatElement = document.getElementById('chat');
+
+        // Update the request URL if not using placeholder
+        if (API_ENDPOINT !== 'API_ENDPOINT_PLACEHOLDER') {
+            chatElement.request = JSON.stringify({
+                url: API_ENDPOINT,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+        }
+
+        // Function to send example questions
+        function sendQuestion(element) {
+            const question = element.textContent;
+            if (chatElement.submitUserMessage) {
+                chatElement.submitUserMessage({ text: question });
+            }
+        }
+
+        // Error handling for API calls
+        chatElement.addEventListener('error', (event) => {
+            console.error('Chat error:', event.detail);
+
+            // Show friendly error message
+            if (API_ENDPOINT === 'API_ENDPOINT_PLACEHOLDER') {
+                alert('⚠️ API endpoint not configured. Please update the API_ENDPOINT variable in index.html with your actual API Gateway URL.');
+            } else {
+                alert('⚠️ Failed to connect to the AI service. Please check your internet connection and try again.');
+            }
+        });
+
+        // Log successful responses
+        chatElement.addEventListener('response', (event) => {
+            console.log('AI Response received:', event.detail);
+        });
+
+        // Welcome message on load
+        console.log('%c🤖 Virtual Me Chatbot Loaded Successfully!', 'color: #667eea; font-size: 16px; font-weight: bold;');
+        console.log('%cPowered by: OpenAI GPT-4o-mini + LangChain + LangGraph + FAISS', 'color: #764ba2; font-size: 12px;');
+
+        // Check if API endpoint is configured
+        if (API_ENDPOINT === 'API_ENDPOINT_PLACEHOLDER') {
+            console.warn('%c⚠️ Warning: API endpoint not configured!', 'color: orange; font-size: 14px; font-weight: bold;');
+            console.log('Please update the API_ENDPOINT variable with your AWS API Gateway URL.');
+        }
+    </script>
+</body>
+</html>
