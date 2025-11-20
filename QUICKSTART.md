@@ -26,17 +26,17 @@ export OPENAI_API_KEY="sk-proj-xxxxxxxxxxxxxxxxxxxxx"
 $env:OPENAI_API_KEY="sk-proj-xxxxxxxxxxxxxxxxxxxxx"
 ```
 
-### Step 3: Install Dependencies
+### Step 3: Quick Test
 ```bash
-pip install -r requirements.txt
+./scripts/quickstart.sh
 ```
 
-### Step 4: Test Locally (No Docker Required)
-```bash
-python lambda_function.py
-```
+This script will:
+- Check prerequisites
+- Install dependencies
+- Test the Lambda function locally
 
-You should see a response like:
+You should see output like:
 ```json
 {
   "statusCode": 200,
@@ -46,15 +46,15 @@ You should see a response like:
 }
 ```
 
-### Step 5: Customize Your Knowledge Base
-Edit `resume.md` with your own information:
+### Step 4: Customize Your Knowledge Base
+Edit `src/resume.md` with your own information:
 ```bash
-nano resume.md  # or use any text editor
+nano src/resume.md  # or use any text editor
 ```
 
-### Step 6: Test Again
+### Step 5: Test Again
 ```bash
-python lambda_function.py
+cd src && python lambda_function.py
 ```
 
 **Success!** Your Virtual Me is working locally. Now let's deploy it.
@@ -65,14 +65,14 @@ python lambda_function.py
 
 ### Step 1: Start LocalStack
 ```bash
-make localstack-up
+docker-compose up -d
 # Wait ~10 seconds for LocalStack to initialize
 ```
 
 ### Step 2: Deploy to LocalStack
 ```bash
 export OPENAI_API_KEY="sk-proj-xxxxxxxxxxxxxxxxxxxxx"
-make localstack-deploy
+./scripts/localstack-deploy.sh
 ```
 
 ### Step 3: Get Your API Endpoint
@@ -82,7 +82,7 @@ API Endpoint: http://localhost:4566/restapis/xxxxx/prod/_user_request_/chat
 ```
 
 ### Step 4: Update Frontend
-1. Open `index.html` in a text editor
+1. Open `frontend/index.html` in a text editor
 2. Find this line:
    ```javascript
    const API_ENDPOINT = 'API_ENDPOINT_PLACEHOLDER';
@@ -96,13 +96,13 @@ API Endpoint: http://localhost:4566/restapis/xxxxx/prod/_user_request_/chat
 ### Step 5: Open the Chatbot
 ```bash
 # macOS
-open index.html
+open frontend/index.html
 
 # Linux
-xdg-open index.html
+xdg-open frontend/index.html
 
 # Windows
-start index.html
+start frontend/index.html
 ```
 
 **That's it!** Start chatting with your Virtual Me.
@@ -134,7 +134,15 @@ environment    = "prod"
 
 ### Step 3: Deploy
 ```bash
-make aws-deploy
+# Option 1: Use the automated script
+cd ..
+./scripts/aws-deploy.sh
+
+# Option 2: Manual Terraform
+cd terraform
+terraform init
+terraform plan
+terraform apply
 ```
 
 This will:
@@ -160,6 +168,8 @@ Copy the URL and open it in your browser. Done!
 **Solution**: Install dependencies
 ```bash
 pip install -r requirements.txt
+# or use quickstart script:
+./scripts/quickstart.sh
 ```
 
 ### Issue: "OPENAI_API_KEY not set"
@@ -184,7 +194,7 @@ docker-compose up -d
 ### Issue: "Permission denied" on scripts
 **Solution**: Make scripts executable
 ```bash
-chmod +x localstack-deploy.sh terraform/deploy.sh
+chmod +x scripts/*.sh
 ```
 
 ### Issue: Lambda timeout in AWS

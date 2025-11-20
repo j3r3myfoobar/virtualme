@@ -50,8 +50,8 @@ data "aws_caller_identity" "current" {}
 resource "null_resource" "lambda_dependencies" {
   triggers = {
     requirements = filemd5("${path.module}/../requirements.txt")
-    lambda_code  = filemd5("${path.module}/../lambda_function.py")
-    resume       = filemd5("${path.module}/../resume.md")
+    lambda_code  = filemd5("${path.module}/../src/lambda_function.py")
+    resume       = filemd5("${path.module}/../src/resume.md")
   }
 
   provisioner "local-exec" {
@@ -60,8 +60,8 @@ resource "null_resource" "lambda_dependencies" {
       rm -rf package deployment.zip
       mkdir -p package
       pip install -r requirements.txt -t package/ --quiet
-      cp lambda_function.py package/
-      cp resume.md package/
+      cp src/lambda_function.py package/
+      cp src/resume.md package/
       cd package
       zip -q -r ../deployment.zip .
       cd ..
@@ -284,12 +284,12 @@ resource "aws_s3_object" "index_html" {
 
   # Replace API endpoint placeholder in HTML
   content = replace(
-    file("${path.module}/../index.html"),
+    file("${path.module}/../frontend/index.html"),
     "API_ENDPOINT_PLACEHOLDER",
     "${aws_apigatewayv2_stage.prod.invoke_url}/chat"
   )
 
-  etag = filemd5("${path.module}/../index.html")
+  etag = filemd5("${path.module}/../frontend/index.html")
 }
 
 ###############################################################################

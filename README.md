@@ -47,20 +47,25 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
 ## 📁 Project Structure
 
 ```
-virtual-me-bot/
-├── index.html              # Frontend (Deep Chat UI)
-├── lambda_function.py      # Backend (LangGraph + RAG)
-├── requirements.txt        # Python dependencies
-├── resume.md              # Knowledge base (customize this!)
-├── Makefile               # Build and deployment commands
+virtualme/
+├── src/                   # Lambda source code
+│   ├── lambda_function.py # Backend (LangGraph + RAG)
+│   └── resume.md         # Knowledge base (customize this!)
+├── frontend/              # Frontend application
+│   └── index.html        # Deep Chat UI
+├── scripts/               # Deployment scripts
+│   ├── localstack-deploy.sh  # LocalStack deployment
+│   ├── aws-deploy.sh         # AWS production deployment
+│   └── quickstart.sh         # Quick test script
+├── terraform/             # AWS infrastructure (IaC)
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   └── terraform.tfvars.example
+├── requirements.txt       # Python dependencies
 ├── docker-compose.yml     # LocalStack configuration
-├── localstack-deploy.sh   # LocalStack deployment script
-└── terraform/             # AWS infrastructure
-    ├── main.tf
-    ├── variables.tf
-    ├── outputs.tf
-    ├── deploy.sh
-    └── terraform.tfvars.example
+├── .env.example          # Environment variables template
+└── README.md             # This file
 ```
 
 ## 🚀 Quick Start
@@ -84,22 +89,28 @@ virtual-me-bot/
 
 2. **Install Dependencies**
    ```bash
-   make install
-   # or: pip install -r requirements.txt
+   pip install -r requirements.txt
    ```
 
-3. **Start LocalStack and Deploy**
+3. **Quick Test (Optional)**
    ```bash
-   make localstack-deploy
+   ./scripts/quickstart.sh
+   # This tests the Lambda function locally
    ```
 
-4. **Update Frontend**
-   - Open `index.html`
+4. **Start LocalStack and Deploy**
+   ```bash
+   docker-compose up -d
+   ./scripts/localstack-deploy.sh
+   ```
+
+5. **Update Frontend**
+   - Open `frontend/index.html`
    - Replace `API_ENDPOINT_PLACEHOLDER` with the endpoint shown in deployment output
    - Example: `http://localhost:4566/restapis/xxxxx/prod/_user_request_/chat`
 
-5. **Test the Chatbot**
-   - Open `index.html` in your browser
+6. **Test the Chatbot**
+   - Open `frontend/index.html` in your browser
    - Start asking questions!
 
 ### Option 2: AWS Production Deployment
@@ -118,8 +129,11 @@ virtual-me-bot/
 
 3. **Deploy to AWS**
    ```bash
-   make aws-deploy
-   # or: cd terraform && ./deploy.sh
+   cd terraform
+   terraform init
+   terraform plan
+   terraform apply
+   # or use the automated script: ../scripts/aws-deploy.sh
    ```
 
 4. **Access Your Chatbot**
@@ -130,7 +144,7 @@ virtual-me-bot/
 
 ### Update Your Knowledge Base
 
-1. **Edit `resume.md`** with your own information:
+1. **Edit `src/resume.md`** with your own information:
    ```markdown
    # Your Name
 
@@ -145,15 +159,15 @@ virtual-me-bot/
 2. **Redeploy**:
    ```bash
    # LocalStack
-   make localstack-deploy
+   ./scripts/localstack-deploy.sh
 
    # AWS
-   make aws-deploy
+   cd terraform && terraform apply
    ```
 
 ### Adjust RAG Parameters
 
-In `lambda_function.py`:
+In `src/lambda_function.py`:
 
 ```python
 # Number of document chunks to retrieve
@@ -171,7 +185,7 @@ llm = ChatOpenAI(
 
 ### Customize the UI
 
-Edit `index.html` to change:
+Edit `frontend/index.html` to change:
 - Colors and styling (CSS variables)
 - Initial messages
 - Example questions
@@ -193,9 +207,16 @@ Edit `index.html` to change:
 
 ## 🧪 Testing
 
+### Quick Test Script
+```bash
+export OPENAI_API_KEY="sk-proj-xxxx"
+./scripts/quickstart.sh
+```
+
 ### Test Lambda Locally
 ```bash
 export OPENAI_API_KEY="sk-proj-xxxx"
+cd src
 python lambda_function.py
 ```
 

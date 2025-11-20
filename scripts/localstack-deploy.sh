@@ -53,8 +53,8 @@ mkdir -p package
 pip install -q -r requirements.txt -t package/
 
 # Copy Lambda function and resume
-cp lambda_function.py package/
-cp resume.md package/
+cp src/lambda_function.py package/
+cp src/resume.md package/
 
 # Create zip file
 cd package
@@ -186,8 +186,8 @@ echo -e "\n📋 Deployment Summary:"
 echo -e "  Function Name: ${GREEN}${FUNCTION_NAME}${NC}"
 echo -e "  API Endpoint:  ${GREEN}${API_ENDPOINT}${NC}"
 echo -e "\n🔧 Next Steps:"
-echo -e "  1. Update ${GREEN}index.html${NC} with the API endpoint above"
-echo -e "  2. Open ${GREEN}index.html${NC} in your browser"
+echo -e "  1. Update ${GREEN}frontend/index.html${NC} with the API endpoint above"
+echo -e "  2. Open ${GREEN}frontend/index.html${NC} in your browser"
 echo -e "  3. Start chatting with your Virtual Me!"
 echo -e "\n📊 View Logs:"
 echo -e "  ${GREEN}docker logs -f virtualme-localstack${NC}"
