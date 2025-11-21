@@ -1,21 +1,81 @@
 """
 FAISS-based retriever for semantic search over knowledge base.
 
-Handles creating embeddings and building the FAISS vector store
-for efficient similarity search.
+Supports multiple embedding backends:
+- AWS Bedrock (Titan, Cohere)
+- OpenAI (text-embedding-ada-002)
 """
 
 import os
 from typing import Optional
-from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.vectorstores import VectorStoreRetriever
+from langchain_core.embeddings import Embeddings
+
+# Import config
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from config import get_embedding_config
 
 from loaders.knowledge_base import load_knowledge_base
 
 
 # Global retriever cache (cold start optimization)
 _retriever: Optional[VectorStoreRetriever] = None
+
+
+def _get_embeddings() -> Embeddings:
+    """
+    Get embeddings instance based on configuration.
+
+    Returns:
+        Configured embeddings instance
+
+    Raises:
+        ImportError: If required package not installed
+        ValueError: If backend not supported or credentials missing
+    """
+    config = get_embedding_config()
+    backend = config["backend"]
+    model_id = config["model_id"]
+    aws_region = config["aws_region"]
+
+    if backend == "bedrock":
+        try:
+            from langchain_aws import BedrockEmbeddings
+        except ImportError:
+            raise ImportError(
+                "langchain-aws not installed. Install with: pip install langchain-aws"
+            )
+
+        print(f"Using Bedrock embeddings: {model_id} (region: {aws_region})")
+
+        return BedrockEmbeddings(
+            model_id=model_id,
+            region_name=aws_region
+        )
+
+    elif backend == "openai":
+        try:
+            from langchain_openai import OpenAIEmbeddings
+        except ImportError:
+            raise ImportError(
+                "langchain-openai not installed. Install with: pip install langchain-openai"
+            )
+
+        api_key = os.environ.get('OPENAI_API_KEY')
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not set for OpenAI backend")
+
+        print(f"Using OpenAI embeddings: {model_id}")
+
+        return OpenAIEmbeddings(
+            model=model_id,
+            openai_api_key=api_key
+        )
+
+    else:
+        raise ValueError(f"Unsupported embedding backend: {backend}")
 
 
 def get_retriever(top_k: int = 3) -> VectorStoreRetriever:
@@ -33,7 +93,7 @@ def get_retriever(top_k: int = 3) -> VectorStoreRetriever:
         Configured FAISS retriever
 
     Raises:
-        ValueError: If OPENAI_API_KEY is not set
+        ValueError: If credentials not set
         Exception: If knowledge base loading or indexing fails
 
     Example:
@@ -48,19 +108,13 @@ def get_retriever(top_k: int = 3) -> VectorStoreRetriever:
     if _retriever is not None:
         return _retriever
 
-    # Verify API key is set
-    api_key = os.environ.get('OPENAI_API_KEY')
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is not set")
-
     # Load and split documents
     print("Loading knowledge base...")
     documents = load_knowledge_base()
 
-    # Initialize OpenAI embeddings
-    # Uses text-embedding-ada-002 by default
+    # Get embeddings instance
     print("Creating embeddings...")
-    embeddings = OpenAIEmbeddings(openai_api_key=api_key)
+    embeddings = _get_embeddings()
 
     # Create FAISS vector store from documents
     print("Building FAISS index...")

@@ -50,10 +50,10 @@ src/
 - `build_graph()` - Constructs LangGraph workflow
 
 ### rag/retriever.py
-**FAISS-based semantic search**
+**FAISS-based semantic search with multi-backend embeddings**
 
 - Loads knowledge base documents
-- Creates OpenAI embeddings
+- Creates embeddings (Bedrock Titan or OpenAI)
 - Builds FAISS index
 - Performs similarity search
 
@@ -65,10 +65,14 @@ src/
 - Caches retriever in module-level variable
 - Only builds index once per container
 
-### rag/generator.py
-**LLM-based response generation**
+**Supported backends:**
+- Bedrock Titan Embeddings (production)
+- OpenAI Embeddings (optional)
 
-- Calls OpenAI GPT-4o-mini
+### rag/generator.py
+**LLM-based response generation with multi-backend support**
+
+- Calls Bedrock (Llama, Claude), LM Studio, or OpenAI
 - Enforces grounding in context
 - Manages system prompts
 
@@ -76,8 +80,14 @@ src/
 - `generate_response(context, question)` - Generate answer
 - `update_system_prompt(new_prompt)` - Customize behavior
 
+**Supported backends:**
+- Bedrock: Llama 3.2 (1B, 3B, 8B), Claude 3 Haiku, Mistral 7B
+- LM Studio: Any local model
+- OpenAI: GPT-4o-mini, GPT-4o (legacy)
+
 **Configuration:**
-- Model: `gpt-4o-mini` (configurable)
+- Backend: Set via `LLM_BACKEND` env var
+- Model: Set via `LLM_MODEL` env var
 - Temperature: `0.3` (low for factual responses)
 
 ### rag/state.py
@@ -107,12 +117,39 @@ src/
 
 ## 🔧 Usage Examples
 
-### Running Locally
+### Running Locally with LM Studio
 
-```python
+```bash
 # From project root
 cd src
-export OPENAI_API_KEY="sk-proj-xxx"
+
+# Configure environment (create .env file)
+cat > .env << EOF
+LLM_BACKEND=lm_studio
+LLM_MODEL=llama-3.2-3b-instruct
+LLM_TEMPERATURE=0.3
+EMBEDDING_BACKEND=bedrock
+EMBEDDING_MODEL=titan-embed-text-v2
+AWS_REGION=us-east-1
+EOF
+
+# Run
+python lambda_function.py
+```
+
+### Running Locally with Bedrock
+
+```bash
+# Ensure AWS credentials are configured
+aws configure
+
+# Set environment variables
+export LLM_BACKEND=bedrock
+export LLM_MODEL=llama-3.2-3b
+export EMBEDDING_BACKEND=bedrock
+export EMBEDDING_MODEL=titan-embed-text-v2
+
+# Run
 python lambda_function.py
 ```
 
@@ -133,8 +170,12 @@ response = http_response(200, {'text': answer})
 ### Customizing RAG Parameters
 
 ```python
+import os
 from rag.retriever import get_retriever
 from rag.generator import generate_response, update_system_prompt
+
+# Switch models via environment
+os.environ["LLM_MODEL"] = "claude-3-haiku"  # Use Claude instead of Llama
 
 # Get retriever with more results
 retriever = get_retriever(top_k=5)
@@ -144,6 +185,22 @@ update_system_prompt("""
 You are a friendly assistant...
 CONTEXT: {context}
 """)
+```
+
+### Backend Configuration
+
+```python
+from config import get_model_config, BEDROCK_MODELS
+
+# Get current config
+config = get_model_config()
+print(f"Backend: {config.backend}")
+print(f"Model: {config.model_id}")
+
+# List available Bedrock models
+print("Available models:")
+for name, model_id in BEDROCK_MODELS.items():
+    print(f"  - {name}: {model_id}")
 ```
 
 ## 🧪 Testing

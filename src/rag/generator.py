@@ -1,14 +1,21 @@
 """
-LLM-based response generator.
+LLM-based response generator with multiple backend support.
 
-Handles calling OpenAI GPT-4o-mini with retrieved context
-to generate grounded responses.
+Supports:
+- AWS Bedrock (Llama, Claude, Mistral, Titan)
+- LM Studio (local development)
+- OpenAI (legacy support)
 """
 
 import os
 from typing import Optional
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
+from langchain_core.language_models import BaseChatModel
+
+# Import config
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from config import get_model_config, ModelConfig
 
 
 # System prompt that defines the chatbot's persona and constraints
@@ -28,12 +35,83 @@ CONTEXT:
 Remember: You are speaking AS this person, not ABOUT them."""
 
 
+def _get_llm(config: ModelConfig) -> BaseChatModel:
+    """
+    Get LLM instance based on configuration.
+
+    Args:
+        config: Model configuration
+
+    Returns:
+        Configured LLM instance
+
+    Raises:
+        ValueError: If backend is not supported or credentials missing
+    """
+    if config.backend == "bedrock":
+        try:
+            from langchain_aws import ChatBedrock
+        except ImportError:
+            raise ImportError(
+                "langchain-aws not installed. Install with: pip install langchain-aws"
+            )
+
+        print(f"Using Bedrock model: {config.model_id} (region: {config.aws_region})")
+
+        return ChatBedrock(
+            model_id=config.model_id,
+            region_name=config.aws_region,
+            model_kwargs={
+                "temperature": config.temperature,
+                "max_tokens": config.max_tokens or 2048,
+            }
+        )
+
+    elif config.backend == "lm_studio":
+        try:
+            from langchain_openai import ChatOpenAI
+        except ImportError:
+            raise ImportError(
+                "langchain-openai not installed. Install with: pip install langchain-openai"
+            )
+
+        print(f"Using LM Studio model: {config.model_id} at {config.lm_studio_base_url}")
+
+        return ChatOpenAI(
+            base_url=config.lm_studio_base_url,
+            api_key="lm-studio",  # LM Studio doesn't require real API key
+            model=config.model_id,
+            temperature=config.temperature,
+        )
+
+    elif config.backend == "openai":
+        try:
+            from langchain_openai import ChatOpenAI
+        except ImportError:
+            raise ImportError(
+                "langchain-openai not installed. Install with: pip install langchain-openai"
+            )
+
+        api_key = config.openai_api_key or os.environ.get('OPENAI_API_KEY')
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not set for OpenAI backend")
+
+        print(f"Using OpenAI model: {config.model_id}")
+
+        return ChatOpenAI(
+            model=config.model_id,
+            temperature=config.temperature,
+            openai_api_key=api_key
+        )
+
+    else:
+        raise ValueError(f"Unsupported backend: {config.backend}")
+
+
 def generate_response(
     context: str,
     question: str,
-    model: str = "gpt-4o-mini",
-    temperature: float = 0.3,
-    api_key: Optional[str] = None
+    config: Optional[ModelConfig] = None
 ) -> str:
     """
     Generate response using LLM based on retrieved context.
@@ -41,23 +119,25 @@ def generate_response(
     Args:
         context: Retrieved context from vector store
         question: User's question
-        model: OpenAI model to use (default: gpt-4o-mini)
-        temperature: Sampling temperature 0.0-1.0 (lower = more factual)
-        api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
+        config: Model configuration (defaults to environment-based config)
 
     Returns:
         Generated response text
 
     Raises:
-        ValueError: If context or question is empty, or API key not set
+        ValueError: If context or question is empty
         Exception: If LLM call fails
 
     Example:
-        >>> context = "I have 8 years of experience in cloud computing..."
-        >>> question = "How many years of experience do you have?"
+        >>> # Using default config (from environment)
+        >>> context = "I have 8 years of experience..."
+        >>> question = "How many years of experience?"
         >>> response = generate_response(context, question)
-        >>> "8 years" in response
-        True
+
+        >>> # Using custom config
+        >>> from config import ModelConfig
+        >>> config = ModelConfig(backend="bedrock", model_id="llama-3.2-8b")
+        >>> response = generate_response(context, question, config)
     """
     # Validate inputs
     if not context:
@@ -65,18 +145,12 @@ def generate_response(
     if not question:
         raise ValueError("Question cannot be empty")
 
-    # Get API key
-    if api_key is None:
-        api_key = os.environ.get('OPENAI_API_KEY')
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is not set")
+    # Get configuration
+    if config is None:
+        config = get_model_config()
 
-    # Initialize the LLM
-    llm = ChatOpenAI(
-        model=model,
-        temperature=temperature,  # Low temperature for more factual responses
-        openai_api_key=api_key
-    )
+    # Get LLM instance
+    llm = _get_llm(config)
 
     # Format the full prompt
     prompt = SYSTEM_PROMPT.format(context=context)
@@ -87,7 +161,7 @@ def generate_response(
         HumanMessage(content=f"Question: {question}")
     ]
 
-    print(f"Generating response with {model} (temp={temperature})...")
+    print(f"Generating response (backend={config.backend}, temp={config.temperature})...")
     response = llm.invoke(messages)
 
     return response.content

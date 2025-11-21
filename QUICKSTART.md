@@ -5,36 +5,48 @@ Get your Virtual Me chatbot running in under 5 minutes!
 ## Prerequisites Checklist
 
 - [ ] Python 3.11+ installed (`python --version`)
-- [ ] Docker installed (`docker --version`)
-- [ ] OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
+- [ ] AWS CLI configured (`aws configure`)
+- [ ] AWS Bedrock access enabled (for production)
+- [ ] LM Studio installed (optional, for local dev - [Download here](https://lmstudio.ai))
+- [ ] Docker installed (optional, for LocalStack - `docker --version`)
 
-## Option 1: Local Development (Fastest)
+## Option 1: Local Development with LM Studio (Fastest)
 
 ### Step 1: Clone and Setup
 ```bash
 git clone <your-repo>
 cd virtualme
+cp .env.example .env
 ```
 
-### Step 2: Set Your OpenAI API Key
+### Step 2: Setup LM Studio
+1. Download and install [LM Studio](https://lmstudio.ai)
+2. Download a model (e.g., "Llama 3.2 3B Instruct")
+3. Start the local server:
+   - Click "Local Server" tab in LM Studio
+   - Load your model
+   - Start server (default: http://localhost:1234/v1)
+
+### Step 3: Configure Environment
+Edit `.env` file:
 ```bash
-export OPENAI_API_KEY="sk-proj-xxxxxxxxxxxxxxxxxxxxx"
+LLM_BACKEND=lm_studio
+LLM_MODEL=llama-3.2-3b-instruct
+LLM_TEMPERATURE=0.3
+EMBEDDING_BACKEND=bedrock  # Requires AWS credentials
+EMBEDDING_MODEL=titan-embed-text-v2
+AWS_REGION=us-east-1
 ```
 
-**Windows (PowerShell)**:
-```powershell
-$env:OPENAI_API_KEY="sk-proj-xxxxxxxxxxxxxxxxxxxxx"
+### Step 4: Install Dependencies
+```bash
+pip install -r requirements.txt
 ```
 
-### Step 3: Quick Test
+### Step 5: Quick Test
 ```bash
 ./scripts/quickstart.sh
 ```
-
-This script will:
-- Check prerequisites
-- Install dependencies
-- Test the Lambda function locally
 
 You should see output like:
 ```json
@@ -46,18 +58,18 @@ You should see output like:
 }
 ```
 
-### Step 4: Customize Your Knowledge Base
+### Step 6: Customize Your Knowledge Base
 Edit `src/resume.md` with your own information:
 ```bash
 nano src/resume.md  # or use any text editor
 ```
 
-### Step 5: Test Again
+### Step 7: Test Again
 ```bash
 cd src && python lambda_function.py
 ```
 
-**Success!** Your Virtual Me is working locally. Now let's deploy it.
+**Success!** Your Virtual Me is working locally with LM Studio.
 
 ---
 
@@ -69,19 +81,25 @@ docker-compose up -d
 # Wait ~10 seconds for LocalStack to initialize
 ```
 
-### Step 2: Deploy to LocalStack
+### Step 2: Configure Environment
 ```bash
-export OPENAI_API_KEY="sk-proj-xxxxxxxxxxxxxxxxxxxxx"
+# Create .env file with your settings
+cp .env.example .env
+# Edit .env to use lm_studio backend
+```
+
+### Step 3: Deploy to LocalStack
+```bash
 ./scripts/localstack-deploy.sh
 ```
 
-### Step 3: Get Your API Endpoint
+### Step 4: Get Your API Endpoint
 Look for this in the output:
 ```
 API Endpoint: http://localhost:4566/restapis/xxxxx/prod/_user_request_/chat
 ```
 
-### Step 4: Update Frontend
+### Step 5: Update Frontend
 1. Open `frontend/index.html` in a text editor
 2. Find this line:
    ```javascript
@@ -93,7 +111,7 @@ API Endpoint: http://localhost:4566/restapis/xxxxx/prod/_user_request_/chat
    ```
 4. Save the file
 
-### Step 5: Open the Chatbot
+### Step 6: Open the Chatbot
 ```bash
 # macOS
 open frontend/index.html
@@ -109,9 +127,16 @@ start frontend/index.html
 
 ---
 
-## Option 3: AWS Production Deployment
+## Option 3: AWS Production Deployment with Bedrock
 
-### Step 1: Configure AWS
+### Step 1: Enable Bedrock Access
+1. Go to [AWS Bedrock Console](https://console.aws.amazon.com/bedrock)
+2. Request access to:
+   - Meta Llama 3.2 models (1B, 3B, 8B)
+   - Amazon Titan Embeddings
+3. Wait for approval (usually instant)
+
+### Step 2: Configure AWS
 ```bash
 aws configure
 # Enter your AWS Access Key ID
@@ -119,7 +144,7 @@ aws configure
 # Enter region (e.g., us-east-1)
 ```
 
-### Step 2: Setup Terraform Variables
+### Step 3: Setup Terraform Variables
 ```bash
 cd terraform
 cp terraform.tfvars.example terraform.tfvars
@@ -127,9 +152,14 @@ cp terraform.tfvars.example terraform.tfvars
 
 Edit `terraform.tfvars`:
 ```hcl
-openai_api_key = "sk-proj-xxxxxxxxxxxxxxxxxxxxx"  # Your key here
-aws_region     = "us-east-1"
-environment    = "prod"
+# Model configuration
+llm_model       = "llama-3.2-3b"      # Or claude-3-haiku
+embedding_model = "titan-embed-text-v2"
+llm_temperature = "0.3"
+
+# AWS configuration
+aws_region  = "us-east-1"
+environment = "prod"
 ```
 
 ### Step 3: Deploy
@@ -151,13 +181,13 @@ This will:
 3. Create S3 bucket for frontend
 4. Upload and configure everything
 
-### Step 4: Get Your URL
+### Step 5: Get Your URL
 After deployment completes, look for:
 ```
 Chatbot URL: http://virtual-me-chatbot-frontend-prod-123456.s3-website-us-east-1.amazonaws.com
 ```
 
-### Step 5: Open and Test
+### Step 6: Open and Test
 Copy the URL and open it in your browser. Done!
 
 ---
@@ -172,10 +202,14 @@ pip install -r requirements.txt
 ./scripts/quickstart.sh
 ```
 
-### Issue: "OPENAI_API_KEY not set"
-**Solution**: Export the key
+### Issue: "AWS credentials not configured"
+**Solution**: Configure AWS CLI
 ```bash
-export OPENAI_API_KEY="sk-proj-xxxxxxxxxxxxxxxxxxxxx"
+aws configure
+# Or set environment variables:
+export AWS_ACCESS_KEY_ID="your-key"
+export AWS_SECRET_ACCESS_KEY="your-secret"
+export AWS_REGION="us-east-1"
 ```
 
 ### Issue: LocalStack not responding
@@ -204,9 +238,10 @@ aws logs tail /aws/lambda/virtual-me-chatbot-prod --follow
 ```
 
 Common causes:
-- OpenAI API rate limits
+- Bedrock throttling (request quota increase)
 - Large resume causing slow embeddings
 - Network issues
+- Model not enabled in Bedrock console
 
 **Fix**: Increase timeout in `terraform/main.tf`:
 ```hcl
@@ -226,7 +261,7 @@ cd terraform && terraform apply
 
 1. **Update resume.md** with your information
 2. **Test locally** to verify responses
-3. **Redeploy** using `make localstack-deploy` or `make aws-deploy`
+3. **Redeploy** using `./scripts/localstack-deploy.sh` or `./scripts/aws-deploy.sh`
 
 ### Add More Features
 
@@ -257,28 +292,34 @@ aws logs tail /aws/apigateway/virtual-me-api-prod --follow
 
 ## Cost Estimates
 
-### LocalStack
-**Cost**: $0 (completely free)
+### Local Development (LM Studio)
+**Cost**: $0 (completely free, runs on your machine)
 
-### AWS (Monthly)
+### AWS with Bedrock (Monthly)
 - **Lambda**: $0.20 per 1M requests
 - **API Gateway**: $1.00 per 1M requests
 - **S3**: $0.023 per GB (~$0.01 for this project)
 - **CloudWatch**: ~$0.50 for logs
-- **OpenAI**: ~$0.15 per 1M tokens (GPT-4o-mini)
+- **Bedrock Llama 3.2 3B**: ~$0.10 per 1M input tokens, ~$0.13 per 1M output tokens
+- **Bedrock Titan Embeddings**: ~$0.10 per 1M tokens
 
 **Example** (10,000 requests/month):
 - Lambda: $0.002
 - API Gateway: $0.01
 - S3: $0.01
 - CloudWatch: $0.50
-- OpenAI: ~$1.00
-- **Total**: ~$1.50/month
+- Bedrock: ~$0.50 (Llama 3.2 3B + Titan embeddings)
+- **Total**: ~$1.00-$2.00/month
 
 **AWS Free Tier** (first 12 months):
 - 1M Lambda requests/month free
 - 1M API Gateway requests/month free
 - 5GB S3 storage free
+
+**Model Cost Comparison**:
+- **Llama 3.2 3B**: Most cost-effective
+- **Llama 3.2 8B**: ~2x cost, better quality
+- **Claude 3 Haiku**: ~3-5x cost, premium quality
 
 ---
 

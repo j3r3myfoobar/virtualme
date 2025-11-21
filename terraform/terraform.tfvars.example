@@ -8,9 +8,23 @@ environment = "prod"
 # Project Configuration
 project_name = "virtual-me-chatbot"
 
-# OpenAI Configuration
-# Get your API key from: https://platform.openai.com/api-keys
-openai_api_key = "sk-proj-xxxxxxxxxxxxxxxxxxxxx"
+# LLM Configuration (Bedrock)
+# Available Bedrock models:
+# - llama-3.2-1b, llama-3.2-3b, llama-3.2-8b (Meta Llama)
+# - claude-3-haiku, claude-3-sonnet (Anthropic)
+# - mistral-7b (Mistral AI)
+llm_model       = "llama-3.2-3b"
+llm_temperature = "0.3"
+
+# Embedding Configuration (Bedrock)
+# Available embedding models:
+# - titan-embed-text-v1, titan-embed-text-v2 (Amazon)
+# - cohere-embed-english, cohere-embed-multilingual (Cohere)
+embedding_model = "titan-embed-text-v2"
+
+# OpenAI Configuration (optional - only for local LM Studio development)
+# Leave empty if using Bedrock
+openai_api_key = ""
 
 # Logging Configuration
 log_retention_days = 7

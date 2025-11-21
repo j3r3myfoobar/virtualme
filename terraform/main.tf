@@ -103,7 +103,7 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Custom policy for additional permissions if needed
+# Custom policy for Lambda permissions
 resource "aws_iam_role_policy" "lambda_policy" {
   name = "${local.function_name}-policy"
   role = aws_iam_role.lambda_role.id
@@ -119,6 +119,16 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "logs:PutLogEvents"
         ]
         Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream"
+        ]
+        Resource = [
+          "arn:aws:bedrock:${var.aws_region}::foundation-model/*"
+        ]
       }
     ]
   })
@@ -140,7 +150,20 @@ resource "aws_lambda_function" "virtual_me" {
 
   environment {
     variables = {
-      OPENAI_API_KEY = var.openai_api_key
+      # LLM Configuration
+      LLM_BACKEND         = "bedrock"
+      LLM_MODEL          = var.llm_model
+      LLM_TEMPERATURE    = var.llm_temperature
+
+      # Embedding Configuration
+      EMBEDDING_BACKEND  = "bedrock"
+      EMBEDDING_MODEL    = var.embedding_model
+
+      # AWS Region
+      AWS_REGION         = var.aws_region
+
+      # Legacy OpenAI support (optional)
+      # OPENAI_API_KEY   = var.openai_api_key
     }
   }
 
