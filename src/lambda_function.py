@@ -9,6 +9,10 @@ from typing import Dict, Any
 
 from rag.pipeline import run_rag_pipeline
 from utils.http import http_response
+from utils.logger import get_logger, add_lambda_context
+
+# Initialize structured logger
+logger = get_logger(__name__)
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -32,8 +36,12 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
     """
 
+    # Get Lambda context for logging
+    context_data = add_lambda_context(context)
+
     # Handle CORS preflight requests
     if event.get('requestContext', {}).get('http', {}).get('method') == 'OPTIONS':
+        logger.debug("cors_preflight_request", **context_data)
         return http_response(200, {'message': 'OK'})
 
     try:
@@ -42,16 +50,25 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         messages = body.get('messages', [])
 
         if not messages:
+            logger.warning("no_messages_provided", **context_data)
             return http_response(400, {'error': 'No messages provided'})
 
         # Extract the last user message (Deep Chat sends full history)
         last_user_message = extract_last_user_message(messages)
 
         if not last_user_message:
+            logger.warning("no_user_message_found",
+                         message_count=len(messages),
+                         **context_data)
             return http_response(400, {'error': 'No user message found'})
 
+        # Log request
+        logger.info("processing_question",
+                   question_preview=last_user_message[:100],
+                   question_length=len(last_user_message),
+                   **context_data)
+
         # Run the RAG pipeline
-        print(f"Processing question: {last_user_message[:100]}...")
         answer = run_rag_pipeline(last_user_message)
 
         # Format response for Deep Chat
@@ -59,22 +76,34 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'text': answer
         }
 
-        print(f"Response generated: {answer[:100]}...")
+        # Log successful response
+        logger.info("response_generated",
+                   answer_preview=answer[:100],
+                   answer_length=len(answer),
+                   **context_data)
+
         return http_response(200, response_body)
 
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.error("invalid_json",
+                    error=str(e),
+                    **context_data)
         return http_response(400, {'error': 'Invalid JSON in request body'})
 
     except ValueError as e:
         # Validation errors (empty question, missing API key, etc.)
-        print(f"Validation error: {str(e)}")
+        logger.warning("validation_error",
+                      error=str(e),
+                      **context_data)
         return http_response(400, {'error': str(e)})
 
     except Exception as e:
         # Unexpected errors
-        print(f"Error processing request: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error("unexpected_error",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc_info=True,
+                    **context_data)
         return http_response(500, {
             'error': 'Internal server error',
             'details': str(e)

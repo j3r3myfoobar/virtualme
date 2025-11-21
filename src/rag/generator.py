@@ -16,6 +16,10 @@ from langchain_core.language_models import BaseChatModel
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import get_model_config, ModelConfig
+from utils.logger import get_logger
+
+# Initialize logger
+logger = get_logger(__name__)
 
 
 # System prompt that defines the chatbot's persona and constraints
@@ -56,7 +60,7 @@ def _get_llm(config: ModelConfig) -> BaseChatModel:
                 "langchain-aws not installed. Install with: pip install langchain-aws"
             )
 
-        print(f"Using Bedrock model: {config.model_id} (region: {config.aws_region})")
+        logger.info("bedrock_model_initialized", model_id=config.model_id, region=config.aws_region)
 
         return ChatBedrock(
             model_id=config.model_id,
@@ -75,7 +79,7 @@ def _get_llm(config: ModelConfig) -> BaseChatModel:
                 "langchain-openai not installed. Install with: pip install langchain-openai"
             )
 
-        print(f"Using LM Studio model: {config.model_id} at {config.lm_studio_base_url}")
+        logger.info("lm_studio_model_initialized", model_id=config.model_id, base_url=config.lm_studio_base_url)
 
         return ChatOpenAI(
             base_url=config.lm_studio_base_url,
@@ -96,7 +100,7 @@ def _get_llm(config: ModelConfig) -> BaseChatModel:
         if not api_key:
             raise ValueError("OPENAI_API_KEY not set for OpenAI backend")
 
-        print(f"Using OpenAI model: {config.model_id}")
+        logger.info("openai_model_initialized", model_id=config.model_id)
 
         return ChatOpenAI(
             model=config.model_id,
@@ -161,7 +165,7 @@ def generate_response(
         HumanMessage(content=f"Question: {question}")
     ]
 
-    print(f"Generating response (backend={config.backend}, temp={config.temperature})...")
+    logger.info("generating_response", backend=config.backend, temperature=config.temperature)
     response = llm.invoke(messages)
 
     return response.content
@@ -185,4 +189,4 @@ def update_system_prompt(new_prompt: str) -> None:
         raise ValueError("System prompt must contain {context} placeholder")
 
     SYSTEM_PROMPT = new_prompt
-    print("System prompt updated")
+    logger.info("system_prompt_updated")

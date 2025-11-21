@@ -16,9 +16,12 @@ from langchain_core.embeddings import Embeddings
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import get_embedding_config
+from utils.logger import get_logger
 
 from loaders.knowledge_base import load_knowledge_base
 
+# Initialize logger
+logger = get_logger(__name__)
 
 # Global retriever cache (cold start optimization)
 _retriever: Optional[VectorStoreRetriever] = None
@@ -48,7 +51,7 @@ def _get_embeddings() -> Embeddings:
                 "langchain-aws not installed. Install with: pip install langchain-aws"
             )
 
-        print(f"Using Bedrock embeddings: {model_id} (region: {aws_region})")
+        logger.info("bedrock_embeddings_initialized", model_id=model_id, region=aws_region)
 
         return BedrockEmbeddings(
             model_id=model_id,
@@ -67,7 +70,7 @@ def _get_embeddings() -> Embeddings:
         if not api_key:
             raise ValueError("OPENAI_API_KEY not set for OpenAI backend")
 
-        print(f"Using OpenAI embeddings: {model_id}")
+        logger.info("openai_embeddings_initialized", model_id=model_id)
 
         return OpenAIEmbeddings(
             model=model_id,
@@ -109,15 +112,15 @@ def get_retriever(top_k: int = 3) -> VectorStoreRetriever:
         return _retriever
 
     # Load and split documents
-    print("Loading knowledge base...")
+    logger.info("loading_knowledge_base")
     documents = load_knowledge_base()
 
     # Get embeddings instance
-    print("Creating embeddings...")
+    logger.info("creating_embeddings")
     embeddings = _get_embeddings()
 
     # Create FAISS vector store from documents
-    print("Building FAISS index...")
+    logger.info("building_faiss_index")
     vectorstore = FAISS.from_documents(documents, embeddings)
 
     # Create retriever that returns top_k most relevant chunks
@@ -126,7 +129,7 @@ def get_retriever(top_k: int = 3) -> VectorStoreRetriever:
         search_kwargs={"k": top_k}
     )
 
-    print(f"Retriever initialized (top_k={top_k})")
+    logger.info("retriever_initialized", top_k=top_k)
 
     return _retriever
 
@@ -139,4 +142,4 @@ def reset_retriever() -> None:
     """
     global _retriever
     _retriever = None
-    print("Retriever cache cleared")
+    logger.info("retriever_cache_cleared")
