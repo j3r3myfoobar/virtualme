@@ -6,10 +6,12 @@ Main entry point for the Lambda function. Delegates to the RAG pipeline.
 
 import json
 from typing import Dict, Any
+from pydantic import ValidationError
 
 from rag.pipeline import run_rag_pipeline
 from utils.http import http_response
 from utils.logger import get_logger, add_lambda_context
+from models.requests import ChatRequest, ErrorResponse
 
 # Initialize structured logger
 logger = get_logger(__name__)
@@ -45,22 +47,27 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return http_response(200, {'message': 'OK'})
 
     try:
-        # Parse request body
+        # Parse and validate request body
         body = json.loads(event.get('body', '{}'))
-        messages = body.get('messages', [])
 
-        if not messages:
-            logger.warning("no_messages_provided", **context_data)
-            return http_response(400, {'error': 'No messages provided'})
+        # Validate request with Pydantic
+        try:
+            chat_request = ChatRequest(**body)
+        except ValidationError as e:
+            # Log validation failure
+            logger.warning("validation_failed",
+                          errors=e.errors(),
+                          **context_data)
 
-        # Extract the last user message (Deep Chat sends full history)
-        last_user_message = extract_last_user_message(messages)
+            # Return detailed validation errors
+            error_response = ErrorResponse(
+                error="Invalid request format",
+                details=e.errors()
+            )
+            return http_response(422, error_response.model_dump())
 
-        if not last_user_message:
-            logger.warning("no_user_message_found",
-                         message_count=len(messages),
-                         **context_data)
-            return http_response(400, {'error': 'No user message found'})
+        # Extract the last user message (already validated by Pydantic)
+        last_user_message = chat_request.messages[-1].text
 
         # Log request
         logger.info("processing_question",
