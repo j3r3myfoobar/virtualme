@@ -17,6 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import get_embedding_config
 from utils.logger import get_logger
+from utils.retry import embedding_retry
 
 from loaders.knowledge_base import load_knowledge_base
 
@@ -81,6 +82,27 @@ def _get_embeddings() -> Embeddings:
         raise ValueError(f"Unsupported embedding backend: {backend}")
 
 
+@embedding_retry
+def _build_vector_store_with_retry(documents: list, embeddings: Embeddings) -> FAISS:
+    """
+    Build FAISS vector store with automatic retry on failures.
+
+    Uses exponential backoff retry strategy for embedding API calls.
+    Retries on rate limits, throttling, and network errors.
+
+    Args:
+        documents: List of documents to embed and index
+        embeddings: Embeddings instance to use
+
+    Returns:
+        FAISS vector store with indexed documents
+
+    Raises:
+        Exception: If all retry attempts fail
+    """
+    return FAISS.from_documents(documents, embeddings)
+
+
 def get_retriever(top_k: int = 3) -> VectorStoreRetriever:
     """
     Get or create the FAISS retriever.
@@ -119,9 +141,16 @@ def get_retriever(top_k: int = 3) -> VectorStoreRetriever:
     logger.info("creating_embeddings")
     embeddings = _get_embeddings()
 
-    # Create FAISS vector store from documents
+    # Create FAISS vector store from documents with retry
     logger.info("building_faiss_index")
-    vectorstore = FAISS.from_documents(documents, embeddings)
+    try:
+        vectorstore = _build_vector_store_with_retry(documents, embeddings)
+    except Exception as e:
+        logger.error("faiss_indexing_failed_after_retries",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc_info=True)
+        raise
 
     # Create retriever that returns top_k most relevant chunks
     _retriever = vectorstore.as_retriever(

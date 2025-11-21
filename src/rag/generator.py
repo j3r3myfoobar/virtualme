@@ -17,6 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import get_model_config, ModelConfig
 from utils.logger import get_logger
+from utils.retry import bedrock_retry
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -112,6 +113,28 @@ def _get_llm(config: ModelConfig) -> BaseChatModel:
         raise ValueError(f"Unsupported backend: {config.backend}")
 
 
+@bedrock_retry
+def _invoke_llm_with_retry(llm: BaseChatModel, messages: list) -> str:
+    """
+    Invoke LLM with automatic retry on throttling/failures.
+
+    Uses exponential backoff retry strategy from utils.retry.
+    Retries on throttling, service unavailable, network errors.
+
+    Args:
+        llm: LLM instance to invoke
+        messages: List of messages to send
+
+    Returns:
+        Response content from LLM
+
+    Raises:
+        Exception: If all retry attempts fail
+    """
+    response = llm.invoke(messages)
+    return response.content
+
+
 def generate_response(
     context: str,
     question: str,
@@ -166,9 +189,16 @@ def generate_response(
     ]
 
     logger.info("generating_response", backend=config.backend, temperature=config.temperature)
-    response = llm.invoke(messages)
 
-    return response.content
+    try:
+        return _invoke_llm_with_retry(llm, messages)
+    except Exception as e:
+        logger.error("llm_invocation_failed_after_retries",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    backend=config.backend,
+                    exc_info=True)
+        raise
 
 
 def update_system_prompt(new_prompt: str) -> None:
