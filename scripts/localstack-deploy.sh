@@ -52,9 +52,8 @@ mkdir -p package
 # Install dependencies
 pip install -q -r requirements.txt -t package/
 
-# Copy Lambda function and resume
-cp src/lambda_function.py package/
-cp src/resume.md package/
+# Copy Lambda function and all modules
+cp -r src/* package/
 
 # Create zip file
 cd package

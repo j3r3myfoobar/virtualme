@@ -60,8 +60,7 @@ resource "null_resource" "lambda_dependencies" {
       rm -rf package deployment.zip
       mkdir -p package
       pip install -r requirements.txt -t package/ --quiet
-      cp src/lambda_function.py package/
-      cp src/resume.md package/
+      cp -r src/* package/
       cd package
       zip -q -r ../deployment.zip .
       cd ..

@@ -48,25 +48,34 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
 
 ```
 virtualme/
-├── src/                   # Lambda source code
-│   ├── lambda_function.py # Backend (LangGraph + RAG)
-│   └── resume.md         # Knowledge base (customize this!)
+├── src/                   # Lambda source code (modular)
+│   ├── lambda_function.py # Entry point (Lambda handler)
+│   ├── resume.md         # Knowledge base
+│   ├── rag/              # RAG pipeline modules
+│   │   ├── pipeline.py   # LangGraph orchestration
+│   │   ├── retriever.py  # FAISS vector search
+│   │   ├── generator.py  # LLM response generation
+│   │   └── state.py      # State definitions
+│   ├── loaders/          # Document loaders
+│   │   └── knowledge_base.py
+│   └── utils/            # Utility functions
+│       └── http.py
 ├── frontend/              # Frontend application
 │   └── index.html        # Deep Chat UI
 ├── scripts/               # Deployment scripts
-│   ├── localstack-deploy.sh  # LocalStack deployment
-│   ├── aws-deploy.sh         # AWS production deployment
-│   └── quickstart.sh         # Quick test script
+│   ├── localstack-deploy.sh
+│   ├── aws-deploy.sh
+│   └── quickstart.sh
 ├── terraform/             # AWS infrastructure (IaC)
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── terraform.tfvars.example
+├── tests/                 # Unit and integration tests
+│   ├── unit/
+│   └── integration/
 ├── requirements.txt       # Python dependencies
 ├── docker-compose.yml     # LocalStack configuration
-├── .env.example          # Environment variables template
 └── README.md             # This file
 ```
+
+**Note:** Code is organized into modules locally but deploys as a **single Lambda function**. See [src/README.md](src/README.md) for module details.
 
 ## 🚀 Quick Start
 
@@ -206,6 +215,17 @@ Edit `frontend/index.html` to change:
 **Example**: 10,000 requests/month = ~$1.50/month (AWS) + ~$0.50/month (OpenAI) = **$2/month**
 
 ## 🧪 Testing
+
+### Run Unit Tests
+```bash
+# All tests
+python tests/test_all.py
+
+# Individual test suites
+python tests/unit/test_http.py
+python tests/unit/test_knowledge_base.py
+python tests/unit/test_lambda_handler.py
+```
 
 ### Quick Test Script
 ```bash
