@@ -15,9 +15,10 @@ from tenacity import (
 )
 import logging
 from typing import Callable, TypeVar, Any
+from utils.logger import get_logger
 
-# Get logger
-logger = logging.getLogger(__name__)
+# Get structured logger
+logger = get_logger(__name__)
 
 # Type variable for generic functions
 T = TypeVar('T')
@@ -84,19 +85,15 @@ def bedrock_retry(func: Callable[..., T]) -> Callable[..., T]:
                 'network'
             ]):
                 # Log and let tenacity retry
-                logger.warning(
-                    "Retriable error encountered",
-                    error=str(e),
-                    error_type=type(e).__name__
-                )
+                logger.warning("retriable_error_encountered",
+                              error_message=str(e),
+                              error_type=type(e).__name__)
                 raise  # Re-raise to trigger retry
 
             # Non-retriable error, don't retry
-            logger.error(
-                "Non-retriable error",
-                error=str(e),
-                error_type=type(e).__name__
-            )
+            logger.error("non_retriable_error",
+                        error_message=str(e),
+                        error_type=type(e).__name__)
             raise  # Fail immediately
 
     return wrapper

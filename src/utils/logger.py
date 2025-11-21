@@ -97,6 +97,23 @@ class StructuredLogger:
         """Log critical message."""
         self._log("CRITICAL", event, exc_info=exc_info, **kwargs)
 
+    def log(self, level: int, msg: str, *args, **kwargs):
+        """
+        Standard logging.Logger compatible log method.
+
+        Used by tenacity and other libraries that expect standard logger interface.
+        Maps numeric log levels to our structured logging.
+        """
+        level_names = {
+            logging.DEBUG: "DEBUG",
+            logging.INFO: "INFO",
+            logging.WARNING: "WARNING",
+            logging.ERROR: "ERROR",
+            logging.CRITICAL: "CRITICAL"
+        }
+        level_name = level_names.get(level, "INFO")
+        self._log(level_name, msg, **kwargs)
+
 
 class JSONFormatter(logging.Formatter):
     """
