@@ -7,7 +7,7 @@ while maintaining context hierarchy from markdown headers.
 
 import os
 from typing import List
-from langchain.text_splitter import MarkdownHeaderTextSplitter
+from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
 
 
