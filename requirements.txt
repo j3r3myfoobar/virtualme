@@ -1,21 +1,33 @@
-# Core LangChain and LangGraph dependencies
-langchain==0.1.0
-langgraph==0.0.20
+# Core LangChain and LangGraph dependencies (updated for production readiness)
+# Version 0.3.x provides better stability and Pydantic v2 support
+langchain==0.3.7
+langchain-core==0.3.15
+langchain-community==0.3.7
+langgraph==0.2.45
 
 # AWS Bedrock support (production)
-langchain-aws==0.1.0
-boto3>=1.34.0
-botocore>=1.34.0
+langchain-aws==0.2.6
 
-# OpenAI support (legacy/optional - for LM Studio too)
-langchain-openai==0.0.2
+# AWS SDK
+boto3>=1.35.0
+botocore>=1.35.0
+
+# OpenAI support (for LM Studio compatibility)
+langchain-openai==0.2.8
 
 # Vector store and embeddings
-faiss-cpu==1.7.4
-tiktoken==0.5.2
+faiss-cpu==1.8.0
+tiktoken==0.8.0
 
 # Document processing
-markdown==3.5.1
+langchain-text-splitters==0.3.2
 
-# For production deployment - these will be included in Lambda layer
-# Keep versions compatible with AWS Lambda Python 3.11 runtime
+# Pydantic for validation (LangChain 0.3.x uses Pydantic v2)
+pydantic>=2.0.0,<3.0.0
+pydantic-settings>=2.0.0
+
+# Retry logic for production reliability
+tenacity>=8.2.0
+
+# For production deployment - compatible with AWS Lambda Python 3.11 runtime
+# Note: These versions are tested and compatible as of 2025-11
