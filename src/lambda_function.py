@@ -10,11 +10,7 @@ from pydantic import ValidationError
 
 from rag.pipeline import run_rag_pipeline
 from utils.http import http_response
-from utils.logger import get_logger, add_lambda_context
 from models.requests import ChatRequest, ErrorResponse
-
-# Initialize structured logger
-logger = get_logger(__name__)
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -38,12 +34,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
     """
 
-    # Get Lambda context for logging
-    context_data = add_lambda_context(context)
-
     # Handle CORS preflight requests
     if event.get('requestContext', {}).get('http', {}).get('method') == 'OPTIONS':
-        logger.debug("cors_preflight_request", **context_data)
         return http_response(200, {'message': 'OK'})
 
     try:
@@ -54,11 +46,6 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         try:
             chat_request = ChatRequest(**body)
         except ValidationError as e:
-            # Log validation failure
-            logger.warning("validation_failed",
-                          errors=e.errors(),
-                          **context_data)
-
             # Return detailed validation errors
             error_response = ErrorResponse(
                 error="Invalid request format",
@@ -69,48 +56,35 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Extract the last user message (already validated by Pydantic)
         last_user_message = chat_request.messages[-1].text
 
-        # Log request
-        logger.info("processing_question",
-                   question_preview=last_user_message[:100],
-                   question_length=len(last_user_message),
-                   **context_data)
+        print(f"Processing question: {last_user_message[:100]}...")
 
         # Run the RAG pipeline
         answer = run_rag_pipeline(last_user_message)
+
+        print(f"Generated answer ({len(answer)} chars)")
 
         # Format response for Deep Chat
         response_body = {
             'text': answer
         }
 
-        # Log successful response
-        logger.info("response_generated",
-                   answer_preview=answer[:100],
-                   answer_length=len(answer),
-                   **context_data)
-
         return http_response(200, response_body)
 
     except json.JSONDecodeError as e:
-        logger.error("invalid_json",
-                    error=str(e),
-                    **context_data)
+        print(f"Invalid JSON: {e}")
         return http_response(400, {'error': 'Invalid JSON in request body'})
 
     except ValueError as e:
         # Validation errors (empty question, missing API key, etc.)
-        logger.warning("validation_error",
-                      error=str(e),
-                      **context_data)
+        print(f"Validation error: {e}")
         return http_response(400, {'error': str(e)})
 
     except Exception as e:
         # Unexpected errors
-        logger.error("unexpected_error",
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    exc_info=True,
-                    **context_data)
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+
         return http_response(500, {
             'error': 'Internal server error',
             'details': str(e)

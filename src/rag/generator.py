@@ -16,11 +16,6 @@ from langchain_core.language_models import BaseChatModel
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import get_model_config, ModelConfig
-from utils.logger import get_logger
-from utils.retry import bedrock_retry
-
-# Initialize logger
-logger = get_logger(__name__)
 
 
 # System prompt that defines the chatbot's persona and constraints
@@ -61,7 +56,7 @@ def _get_llm(config: ModelConfig) -> BaseChatModel:
                 "langchain-aws not installed. Install with: pip install langchain-aws"
             )
 
-        logger.info("bedrock_model_initialized", model_id=config.model_id, region=config.aws_region)
+        print(f"Using Bedrock model: {config.model_id}")
 
         return ChatBedrock(
             model_id=config.model_id,
@@ -80,7 +75,7 @@ def _get_llm(config: ModelConfig) -> BaseChatModel:
                 "langchain-openai not installed. Install with: pip install langchain-openai"
             )
 
-        logger.info("lm_studio_model_initialized", model_id=config.model_id, base_url=config.lm_studio_base_url)
+        print(f"Using LM Studio model: {config.model_id}")
 
         return ChatOpenAI(
             base_url=config.lm_studio_base_url,
@@ -101,7 +96,7 @@ def _get_llm(config: ModelConfig) -> BaseChatModel:
         if not api_key:
             raise ValueError("OPENAI_API_KEY not set for OpenAI backend")
 
-        logger.info("openai_model_initialized", model_id=config.model_id)
+        print(f"Using OpenAI model: {config.model_id}")
 
         return ChatOpenAI(
             model=config.model_id,
@@ -111,28 +106,6 @@ def _get_llm(config: ModelConfig) -> BaseChatModel:
 
     else:
         raise ValueError(f"Unsupported backend: {config.backend}")
-
-
-@bedrock_retry
-def _invoke_llm_with_retry(llm: BaseChatModel, messages: list) -> str:
-    """
-    Invoke LLM with automatic retry on throttling/failures.
-
-    Uses exponential backoff retry strategy from utils.retry.
-    Retries on throttling, service unavailable, network errors.
-
-    Args:
-        llm: LLM instance to invoke
-        messages: List of messages to send
-
-    Returns:
-        Response content from LLM
-
-    Raises:
-        Exception: If all retry attempts fail
-    """
-    response = llm.invoke(messages)
-    return response.content
 
 
 def generate_response(
@@ -188,17 +161,10 @@ def generate_response(
         HumanMessage(content=f"Question: {question}")
     ]
 
-    logger.info("generating_response", backend=config.backend, temperature=config.temperature)
+    print(f"Generating response using {config.backend}...")
+    response = llm.invoke(messages)
 
-    try:
-        return _invoke_llm_with_retry(llm, messages)
-    except Exception as e:
-        logger.error("llm_invocation_failed_after_retries",
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    backend=config.backend,
-                    exc_info=True)
-        raise
+    return response.content
 
 
 def update_system_prompt(new_prompt: str) -> None:
@@ -219,4 +185,4 @@ def update_system_prompt(new_prompt: str) -> None:
         raise ValueError("System prompt must contain {context} placeholder")
 
     SYSTEM_PROMPT = new_prompt
-    logger.info("system_prompt_updated")
+    print("System prompt updated")

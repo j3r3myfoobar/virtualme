@@ -10,13 +10,9 @@ from typing import List
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
 
-# Import logger
+# Import path setup
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from utils.logger import get_logger
-
-# Initialize logger
-logger = get_logger(__name__)
 
 
 def load_knowledge_base() -> List[Document]:
@@ -65,6 +61,6 @@ def load_knowledge_base() -> List[Document]:
 
     splits = markdown_splitter.split_text(resume_content)
 
-    logger.info("knowledge_base_loaded", chunk_count=len(splits))
+    print(f"Loaded knowledge base: {len(splits)} chunks")
 
     return splits

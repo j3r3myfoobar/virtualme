@@ -13,10 +13,6 @@ from langgraph.graph import StateGraph, END
 from .state import GraphState
 from .retriever import get_retriever
 from .generator import generate_response
-from utils.logger import get_logger
-
-# Initialize logger
-logger = get_logger(__name__)
 
 
 def retrieve_node(state: GraphState) -> Dict[str, str]:
@@ -44,9 +40,7 @@ def retrieve_node(state: GraphState) -> Dict[str, str]:
     # Format context from retrieved documents
     context = format_context(documents)
 
-    logger.debug("documents_retrieved",
-                document_count=len(documents),
-                context_length=len(context))
+    print(f"Retrieved {len(documents)} relevant documents")
 
     return {"context": context}
 

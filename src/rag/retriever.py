@@ -16,13 +16,8 @@ from langchain_core.embeddings import Embeddings
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import get_embedding_config
-from utils.logger import get_logger
-from utils.retry import embedding_retry
 
 from loaders.knowledge_base import load_knowledge_base
-
-# Initialize logger
-logger = get_logger(__name__)
 
 # Global retriever cache (cold start optimization)
 _retriever: Optional[VectorStoreRetriever] = None
@@ -52,7 +47,7 @@ def _get_embeddings() -> Embeddings:
                 "langchain-aws not installed. Install with: pip install langchain-aws"
             )
 
-        logger.info("bedrock_embeddings_initialized", model_id=model_id, region=aws_region)
+        print(f"Using Bedrock embeddings: {model_id}")
 
         return BedrockEmbeddings(
             model_id=model_id,
@@ -71,7 +66,7 @@ def _get_embeddings() -> Embeddings:
         if not api_key:
             raise ValueError("OPENAI_API_KEY not set for OpenAI backend")
 
-        logger.info("openai_embeddings_initialized", model_id=model_id)
+        print(f"Using OpenAI embeddings: {model_id}")
 
         return OpenAIEmbeddings(
             model=model_id,
@@ -80,27 +75,6 @@ def _get_embeddings() -> Embeddings:
 
     else:
         raise ValueError(f"Unsupported embedding backend: {backend}")
-
-
-@embedding_retry
-def _build_vector_store_with_retry(documents: list, embeddings: Embeddings) -> FAISS:
-    """
-    Build FAISS vector store with automatic retry on failures.
-
-    Uses exponential backoff retry strategy for embedding API calls.
-    Retries on rate limits, throttling, and network errors.
-
-    Args:
-        documents: List of documents to embed and index
-        embeddings: Embeddings instance to use
-
-    Returns:
-        FAISS vector store with indexed documents
-
-    Raises:
-        Exception: If all retry attempts fail
-    """
-    return FAISS.from_documents(documents, embeddings)
 
 
 def get_retriever(top_k: int = 3) -> VectorStoreRetriever:
@@ -134,23 +108,16 @@ def get_retriever(top_k: int = 3) -> VectorStoreRetriever:
         return _retriever
 
     # Load and split documents
-    logger.info("loading_knowledge_base")
+    print("Loading knowledge base...")
     documents = load_knowledge_base()
 
     # Get embeddings instance
-    logger.info("creating_embeddings")
+    print("Creating embeddings...")
     embeddings = _get_embeddings()
 
-    # Create FAISS vector store from documents with retry
-    logger.info("building_faiss_index")
-    try:
-        vectorstore = _build_vector_store_with_retry(documents, embeddings)
-    except Exception as e:
-        logger.error("faiss_indexing_failed_after_retries",
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    exc_info=True)
-        raise
+    # Create FAISS vector store from documents
+    print("Building FAISS index...")
+    vectorstore = FAISS.from_documents(documents, embeddings)
 
     # Create retriever that returns top_k most relevant chunks
     _retriever = vectorstore.as_retriever(
@@ -158,7 +125,7 @@ def get_retriever(top_k: int = 3) -> VectorStoreRetriever:
         search_kwargs={"k": top_k}
     )
 
-    logger.info("retriever_initialized", top_k=top_k)
+    print(f"Retriever initialized (top_k={top_k})")
 
     return _retriever
 
@@ -171,4 +138,4 @@ def reset_retriever() -> None:
     """
     global _retriever
     _retriever = None
-    logger.info("retriever_cache_cleared")
+    print("Retriever cache cleared")
