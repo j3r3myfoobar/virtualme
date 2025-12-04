@@ -13,59 +13,60 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #ffffff;
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
+            display: block;
+            padding: 0;
+            margin: 0;
         }
 
         .header {
             text-align: center;
-            color: white;
-            margin-bottom: 30px;
+            padding: 20px;
+            margin: 0 auto;
             max-width: 800px;
         }
 
         .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            font-weight: 700;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            font-size: 1.8em;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #202123;
         }
 
         .header p {
-            font-size: 1.1em;
-            opacity: 0.95;
-            line-height: 1.6;
+            font-size: 0.95em;
+            color: #6e6e80;
+            line-height: 1.5;
         }
 
         .chat-container {
-            width: 100%;
-            max-width: 800px;
-            height: 600px;
+            width: 60%;
+            max-width: 60%;
+            height: 500px;
             background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            border-radius: 0;
+            box-shadow: none;
             overflow: hidden;
             position: relative;
+            margin: 0 auto 20px;
+            padding-top: 50px;
         }
 
         .status-indicator {
             position: absolute;
             top: 15px;
             right: 15px;
-            padding: 8px 16px;
-            background: rgba(16, 185, 129, 0.9);
+            padding: 6px 12px;
+            background: #10b981;
             color: white;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: 600;
+            border-radius: 6px;
+            font-size: 0.8em;
+            font-weight: 500;
             z-index: 10;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }
 
         .status-dot {
@@ -82,36 +83,42 @@
         }
 
         .footer {
-            margin-top: 20px;
+            padding: 15px;
             text-align: center;
-            color: white;
-            font-size: 0.9em;
-            opacity: 0.9;
+            color: #6e6e80;
+            font-size: 0.85em;
+            background: #ffffff;
+            border-top: 1px solid #e5e5e5;
+            width: 100%;
         }
 
         .footer a {
-            color: white;
+            color: #10b981;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
             text-decoration: underline;
         }
 
-        /* Deep Chat Custom Styling */
+        /* Deep Chat Custom Styling - Force full screen */
         deep-chat {
-            width: 100%;
-            height: 100%;
-            border-radius: 20px;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 100% !important;
+            border-radius: 0 !important;
+            display: block !important;
         }
 
+
         .example-questions {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px;
-            margin-top: 20px;
-            border-radius: 15px;
+            margin: 20px auto;
             max-width: 800px;
-            width: 100%;
+            padding: 0 20px;
         }
 
         .example-questions h3 {
-            color: #667eea;
+            color: #202123;
             margin-bottom: 10px;
             font-size: 1.1em;
         }
@@ -124,7 +131,7 @@
         }
 
         .example-questions li {
-            background: #f3f4f6;
+            background: #f7f7f8;
             padding: 10px 15px;
             border-radius: 8px;
             cursor: pointer;
@@ -141,11 +148,12 @@
 
         @media (max-width: 768px) {
             .header h1 {
-                font-size: 1.8em;
+                font-size: 1.5em;
             }
 
             .chat-container {
-                height: 500px;
+                width: 90%;
+                height: 400px;
             }
 
             .example-questions ul {
@@ -170,36 +178,41 @@
         </div>
         <deep-chat
             id="chat"
-            style="border-radius: 20px"
-            request='{"url": "API_ENDPOINT_PLACEHOLDER"}'
+            style="width: 100%; height: 100%; border-radius: 0;"
+            connect='{"url": "API_ENDPOINT_PLACEHOLDER", "method": "POST"}'
             requestBodyLimits='{"maxMessages": -1}'
+            demo="true"
             messageStyles='{
                 "default": {
                     "shared": {
                         "bubble": {
-                            "maxWidth": "80%",
-                            "borderRadius": "15px",
-                            "padding": "12px 16px",
-                            "fontSize": "0.95em"
+                            "maxWidth": "100%",
+                            "borderRadius": "8px",
+                            "padding": "16px",
+                            "fontSize": "15px",
+                            "lineHeight": "1.6"
                         }
                     },
                     "user": {
                         "bubble": {
-                            "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                            "color": "white"
+                            "background": "#f7f7f8",
+                            "color": "#202123",
+                            "border": "1px solid #d1d5db"
                         }
                     },
                     "ai": {
                         "bubble": {
-                            "background": "#f3f4f6",
-                            "color": "#1f2937"
+                            "background": "#ffffff",
+                            "color": "#202123",
+                            "border": "1px solid #d1d5db"
                         }
                     }
                 },
                 "loading": {
                     "bubble": {
-                        "background": "#e5e7eb",
-                        "color": "#6b7280"
+                        "background": "#ffffff",
+                        "color": "#6e6e80",
+                        "border": "1px solid #d1d5db"
                     }
                 }
             }'
@@ -207,12 +220,12 @@
                 "styles": {
                     "container": {
                         "borderRadius": "25px",
-                        "border": "2px solid #e5e7eb",
-                        "padding": "10px 20px"
+                        "border": "2px solid #9ca3af",
+                        "padding": "8px 20px"
                     },
                     "text": {
                         "fontSize": "0.95em",
-                        "padding": "10px"
+                        "padding": "8px"
                     }
                 },
                 "placeholder": {
@@ -223,18 +236,8 @@
                 "submit": {
                     "container": {
                         "default": {
-                            "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                            "borderRadius": "50%",
-                            "padding": "10px"
-                        }
-                    },
-                    "svg": {
-                        "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?><svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M2,21L23,12L2,3V10L17,12L2,14V21Z\" fill=\"white\"/></svg>",
-                        "styles": {
-                            "default": {
-                                "width": "1.3em",
-                                "height": "1.3em"
-                            }
+                            "padding": "14px 16px",
+                            "borderRadius": "20px"
                         }
                     }
                 }
@@ -263,10 +266,6 @@
         </ul>
     </div>
 
-    <div class="footer">
-        <p>Powered by OpenAI GPT-4o-mini + LangChain + FAISS | Built with ❤️ using AWS Lambda & LangGraph</p>
-    </div>
-
     <!-- Deep Chat Web Component -->
     <script type="module" src="https://cdn.jsdelivr.net/npm/deep-chat@latest/dist/deepChat.bundle.js"></script>
 
@@ -277,16 +276,7 @@
         // Initialize the chat component
         const chatElement = document.getElementById('chat');
 
-        // Update the request URL if not using placeholder
-        if (API_ENDPOINT !== 'API_ENDPOINT_PLACEHOLDER') {
-            chatElement.request = JSON.stringify({
-                url: API_ENDPOINT,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-        }
+        // Note: Request configuration is already set in the HTML element's request attribute
 
         // Function to send example questions
         function sendQuestion(element) {
@@ -299,13 +289,7 @@
         // Error handling for API calls
         chatElement.addEventListener('error', (event) => {
             console.error('Chat error:', event.detail);
-
-            // Show friendly error message
-            if (API_ENDPOINT === 'API_ENDPOINT_PLACEHOLDER') {
-                alert('⚠️ API endpoint not configured. Please update the API_ENDPOINT variable in index.html with your actual API Gateway URL.');
-            } else {
-                alert('⚠️ Failed to connect to the AI service. Please check your internet connection and try again.');
-            }
+            alert('⚠️ Failed to connect to the AI service. Please check your internet connection and try again.');
         });
 
         // Log successful responses
@@ -315,13 +299,8 @@
 
         // Welcome message on load
         console.log('%c🤖 Virtual Me Chatbot Loaded Successfully!', 'color: #667eea; font-size: 16px; font-weight: bold;');
-        console.log('%cPowered by: OpenAI GPT-4o-mini + LangChain + LangGraph + FAISS', 'color: #764ba2; font-size: 12px;');
-
-        // Check if API endpoint is configured
-        if (API_ENDPOINT === 'API_ENDPOINT_PLACEHOLDER') {
-            console.warn('%c⚠️ Warning: API endpoint not configured!', 'color: orange; font-size: 14px; font-weight: bold;');
-            console.log('Please update the API_ENDPOINT variable with your AWS API Gateway URL.');
-        }
+        console.log('%cPowered by: AWS Bedrock + LangChain + LangGraph + DynamoDB', 'color: #764ba2; font-size: 12px;');
+        console.log('%cAPI Endpoint: ' + API_ENDPOINT, 'color: #4CAF50; font-size: 12px;');
     </script>
 </body>
 </html>

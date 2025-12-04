@@ -31,9 +31,9 @@ class ModelConfig:
 
 # Available Bedrock models
 BEDROCK_MODELS = {
-    # Llama models (Meta)
-    "llama-3.2-1b": "meta.llama3-2-1b-instruct-v1:0",
-    "llama-3.2-3b": "meta.llama3-2-3b-instruct-v1:0",
+    # Llama models (Meta) - EU inference profiles for eu-west-3
+    "llama-3.2-1b": "eu.meta.llama3-2-1b-instruct-v1:0",
+    "llama-3.2-3b": "eu.meta.llama3-2-3b-instruct-v1:0",
     "llama-3.2-8b": "us.meta.llama3-2-8b-instruct-v1:0",
     "llama-3.1-8b": "meta.llama3-1-8b-instruct-v1:0",
     "llama-3.1-70b": "meta.llama3-1-70b-instruct-v1:0",
@@ -90,7 +90,8 @@ def get_model_config() -> ModelConfig:
     backend = os.environ.get("LLM_BACKEND", "bedrock").lower()
     model = os.environ.get("LLM_MODEL", "llama-3.2-3b")
     temperature = float(os.environ.get("LLM_TEMPERATURE", "0.3"))
-    aws_region = os.environ.get("AWS_REGION", "us-east-1")
+    # AWS_REGION is reserved in Lambda, use AWS_DEFAULT_REGION instead
+    aws_region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION", "us-east-1")
     lm_studio_url = os.environ.get("LM_STUDIO_BASE_URL", "http://localhost:1234/v1")
     openai_key = os.environ.get("OPENAI_API_KEY")
 
@@ -132,7 +133,8 @@ def get_embedding_config() -> dict:
     return {
         "backend": backend,
         "model_id": model_id,
-        "aws_region": os.environ.get("AWS_REGION", "us-east-1")
+        # AWS_REGION is reserved in Lambda, use AWS_DEFAULT_REGION instead
+        "aws_region": os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION", "us-east-1")
     }
 
 

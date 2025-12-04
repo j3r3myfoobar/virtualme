@@ -5,7 +5,7 @@
 variable "aws_region" {
   description = "AWS region to deploy resources"
   type        = string
-  default     = "us-east-1"
+  default     = "eu-west-3"  # Paris region
 }
 
 variable "environment" {
@@ -48,13 +48,6 @@ variable "llm_temperature" {
   }
 }
 
-variable "openai_api_key" {
-  description = "OpenAI API key (optional - only needed if using OpenAI backend locally)"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
 variable "log_retention_days" {
   description = "CloudWatch log retention in days"
   type        = number
@@ -64,4 +57,55 @@ variable "log_retention_days" {
     condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653], var.log_retention_days)
     error_message = "Log retention days must be a valid CloudWatch retention period."
   }
+}
+
+###############################################################################
+# Custom Domain Configuration
+###############################################################################
+
+variable "domain_name" {
+  description = "Root domain name (e.g., lemaire.tel)"
+  type        = string
+  default     = "lemaire.tel"
+}
+
+variable "frontend_subdomain" {
+  description = "Subdomain for frontend (e.g., chat)"
+  type        = string
+  default     = "chat"
+}
+
+variable "api_subdomain" {
+  description = "Subdomain for API (e.g., api)"
+  type        = string
+  default     = "api"
+}
+
+variable "acm_certificate_arn" {
+  description = "ARN of ACM certificate for *.lemaire.tel (must be in us-east-1 for CloudFront)"
+  type        = string
+  default     = ""  # You'll provide this in terraform.tfvars
+}
+
+variable "route53_zone_id" {
+  description = "Route53 hosted zone ID for lemaire.tel"
+  type        = string
+  default     = ""  # You'll provide this in terraform.tfvars
+}
+
+variable "enable_custom_domain" {
+  description = "Enable custom domain configuration"
+  type        = bool
+  default     = true
+}
+
+###############################################################################
+# Deprecated Variables (kept for backward compatibility)
+###############################################################################
+
+variable "openai_api_key" {
+  description = "DEPRECATED: OpenAI API key (not used in production with Bedrock)"
+  type        = string
+  sensitive   = true
+  default     = ""
 }

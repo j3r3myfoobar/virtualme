@@ -30,6 +30,32 @@ provider "aws" {
   }
 }
 
+# Provider for us-east-1 (required for CloudFront ACM certificates)
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      Project     = "VirtualMe"
+      Environment = var.environment
+      ManagedBy   = "Terraform"
+    }
+  }
+}
+
+###############################################################################
+# Data Sources
+###############################################################################
+
+data "aws_caller_identity" "current" {}
+
+# Route53 Zone for lemaire.tel domain
+data "aws_route53_zone" "main" {
+  name         = "lemaire.tel"
+  private_zone = false
+}
+
 ###############################################################################
 # Local Variables
 ###############################################################################
@@ -38,9 +64,8 @@ locals {
   function_name = "${var.project_name}-${var.environment}"
   api_name      = "${var.project_name}-api-${var.environment}"
   s3_bucket     = "${var.project_name}-frontend-${var.environment}-${data.aws_caller_identity.current.account_id}"
+  api_endpoint  = "https://api.lemaire.tel/chat"  # Hardcoded - we control this domain
 }
-
-data "aws_caller_identity" "current" {}
 
 ###############################################################################
 # Lambda Deployment Package
@@ -59,7 +84,12 @@ resource "null_resource" "lambda_dependencies" {
       cd ${path.module}/..
       rm -rf package deployment.zip
       mkdir -p package
-      pip install -r requirements.txt -t package/ --quiet
+      # Use Docker to build with Linux binaries for Lambda compatibility
+      docker run --rm --platform linux/amd64 \
+        -v "$PWD":/workspace \
+        -w /workspace \
+        python:3.11-slim \
+        /bin/bash -c "pip install -r requirements.txt -t package/ --quiet"
       cp -r src/* package/
       cd package
       zip -q -r ../deployment.zip .
@@ -127,7 +157,23 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "bedrock:InvokeModelWithResponseStream"
         ]
         Resource = [
-          "arn:aws:bedrock:${var.aws_region}::foundation-model/*"
+          # Allow access to foundation models in all regions (inference profiles may route to different regions)
+          "arn:aws:bedrock:*::foundation-model/*",
+          # Allow access to inference profiles in the deployment region
+          "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:GetItem",
+          "dynamodb:Scan",
+          "dynamodb:Query",
+          "dynamodb:BatchWriteItem"
+        ]
+        Resource = [
+          "arn:aws:dynamodb:${var.aws_region}:*:table/${local.function_name}-vectors"
         ]
       }
     ]
@@ -135,11 +181,34 @@ resource "aws_iam_role_policy" "lambda_policy" {
 }
 
 ###############################################################################
+# S3 Bucket for Lambda Deployment Package
+###############################################################################
+
+resource "aws_s3_bucket" "lambda_deployments" {
+  bucket = "${local.function_name}-deployments-${data.aws_caller_identity.current.account_id}"
+}
+
+resource "aws_s3_bucket_versioning" "lambda_deployments" {
+  bucket = aws_s3_bucket.lambda_deployments.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_object" "lambda_package" {
+  bucket = aws_s3_bucket.lambda_deployments.id
+  key    = "deployment-${data.archive_file.lambda_package.output_md5}.zip"
+  source = data.archive_file.lambda_package.output_path
+  etag   = data.archive_file.lambda_package.output_md5
+}
+
+###############################################################################
 # Lambda Function
 ###############################################################################
 
 resource "aws_lambda_function" "virtual_me" {
-  filename         = data.archive_file.lambda_package.output_path
+  s3_bucket        = aws_s3_bucket.lambda_deployments.id
+  s3_key           = aws_s3_object.lambda_package.key
   function_name    = local.function_name
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda_function.lambda_handler"
@@ -159,8 +228,11 @@ resource "aws_lambda_function" "virtual_me" {
       EMBEDDING_BACKEND  = "bedrock"
       EMBEDDING_MODEL    = var.embedding_model
 
-      # AWS Region
-      AWS_REGION         = var.aws_region
+      # DynamoDB Configuration (for vector storage)
+      DYNAMODB_TABLE     = aws_dynamodb_table.vectors.name
+
+      # Note: AWS_REGION is automatically set by Lambda runtime
+      # AWS_DEFAULT_REGION is also set automatically
 
       # Legacy OpenAI support (optional)
       # OPENAI_API_KEY   = var.openai_api_key
@@ -169,7 +241,8 @@ resource "aws_lambda_function" "virtual_me" {
 
   depends_on = [
     aws_iam_role_policy_attachment.lambda_basic,
-    null_resource.lambda_dependencies
+    null_resource.lambda_dependencies,
+    aws_dynamodb_table.vectors
   ]
 }
 
@@ -255,17 +328,17 @@ resource "aws_s3_bucket" "frontend" {
   bucket = local.s3_bucket
 }
 
-# Public access settings
+# Block all public access - CloudFront OAI will access privately
 resource "aws_s3_bucket_public_access_block" "frontend" {
   bucket = aws_s3_bucket.frontend.id
 
-  block_public_acls       = false
-  block_public_policy     = false
-  ignore_public_acls      = false
-  restrict_public_buckets = false
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
-# Bucket policy for public read
+# Bucket policy - Only allow CloudFront OAI to read objects
 resource "aws_s3_bucket_policy" "frontend" {
   bucket = aws_s3_bucket.frontend.id
 
@@ -273,29 +346,18 @@ resource "aws_s3_bucket_policy" "frontend" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "PublicReadGetObject"
-        Effect    = "Allow"
-        Principal = "*"
-        Action    = "s3:GetObject"
-        Resource  = "${aws_s3_bucket.frontend.arn}/*"
+        Sid    = "CloudFrontReadGetObject"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_cloudfront_origin_access_identity.frontend.iam_arn
+        }
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.frontend.arn}/*"
       }
     ]
   })
 
   depends_on = [aws_s3_bucket_public_access_block.frontend]
-}
-
-# Website configuration
-resource "aws_s3_bucket_website_configuration" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
-
-  index_document {
-    suffix = "index.html"
-  }
-
-  error_document {
-    key = "index.html"
-  }
 }
 
 # Upload index.html with API endpoint injected
@@ -304,46 +366,30 @@ resource "aws_s3_object" "index_html" {
   key          = "index.html"
   content_type = "text/html"
 
-  # Replace API endpoint placeholder in HTML
+  # Replace ALL 5 API endpoint placeholders in HTML
   content = replace(
-    file("${path.module}/../frontend/index.html"),
+    replace(
+      replace(
+        replace(
+          replace(
+            file("${path.module}/../frontend/index.html"),
+            "API_ENDPOINT_PLACEHOLDER",
+            local.api_endpoint
+          ),
+          "API_ENDPOINT_PLACEHOLDER",
+          local.api_endpoint
+        ),
+        "API_ENDPOINT_PLACEHOLDER",
+        local.api_endpoint
+      ),
+      "API_ENDPOINT_PLACEHOLDER",
+      local.api_endpoint
+    ),
     "API_ENDPOINT_PLACEHOLDER",
-    "${aws_apigatewayv2_stage.prod.invoke_url}/chat"
+    local.api_endpoint
   )
 
   etag = filemd5("${path.module}/../frontend/index.html")
 }
 
-###############################################################################
-# Outputs
-###############################################################################
-
-output "lambda_function_name" {
-  description = "Name of the Lambda function"
-  value       = aws_lambda_function.virtual_me.function_name
-}
-
-output "lambda_function_arn" {
-  description = "ARN of the Lambda function"
-  value       = aws_lambda_function.virtual_me.arn
-}
-
-output "api_endpoint" {
-  description = "API Gateway endpoint URL"
-  value       = "${aws_apigatewayv2_stage.prod.invoke_url}/chat"
-}
-
-output "website_url" {
-  description = "S3 website URL for the frontend"
-  value       = "http://${aws_s3_bucket_website_configuration.frontend.website_endpoint}"
-}
-
-output "s3_bucket_name" {
-  description = "Name of the S3 bucket hosting the frontend"
-  value       = aws_s3_bucket.frontend.id
-}
-
-output "cloudwatch_log_group" {
-  description = "CloudWatch log group for Lambda function"
-  value       = aws_cloudwatch_log_group.lambda_logs.name
-}
+# Outputs are defined in outputs.tf

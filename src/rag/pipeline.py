@@ -11,13 +11,13 @@ from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
 
 from .state import GraphState
-from .retriever import get_retriever
+from .dynamodb_retriever import get_retriever  # Using DynamoDB instead of FAISS
 from .generator import generate_response
 
 
 def retrieve_node(state: GraphState) -> Dict[str, str]:
     """
-    Retrieval Node: Queries the FAISS vector store for relevant context.
+    Retrieval Node: Queries the DynamoDB vector store for relevant context.
 
     Args:
         state: Current graph state containing the user question
