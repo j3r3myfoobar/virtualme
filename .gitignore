@@ -214,6 +214,9 @@ response.json
 output.json
 outputs.json
 
+# Claude Code configuration
+.claude/
+
 # Terraform
 terraform/.terraform/
 terraform/.terraform.lock.hcl

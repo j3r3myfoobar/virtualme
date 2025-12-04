@@ -148,7 +148,10 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:aws:logs:*:*:*"
+        Resource = [
+          "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.function_name}",
+          "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.function_name}:*"
+        ]
       },
       {
         Effect = "Allow"
@@ -173,7 +176,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "dynamodb:BatchWriteItem"
         ]
         Resource = [
-          "arn:aws:dynamodb:${var.aws_region}:*:table/${local.function_name}-vectors"
+          "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.function_name}-vectors"
         ]
       }
     ]
@@ -261,7 +264,7 @@ resource "aws_apigatewayv2_api" "virtual_me_api" {
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_origins = ["*"]
+    allow_origins = ["https://chat.lemaire.tel"]
     allow_methods = ["POST", "OPTIONS"]
     allow_headers = ["content-type"]
     max_age       = 300

@@ -80,40 +80,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return http_response(400, {'error': str(e)})
 
     except Exception as e:
-        # Unexpected errors
+        # Unexpected errors - log details internally but don't expose to client
         print(f"Error: {e}")
         import traceback
         traceback.print_exc()
 
         return http_response(500, {
-            'error': 'Internal server error',
-            'details': str(e)
+            'error': 'Internal server error'
         })
-
-
-def extract_last_user_message(messages: list) -> str:
-    """
-    Extract the last user message from conversation history.
-
-    Args:
-        messages: List of message dictionaries with 'role' and 'text' keys
-
-    Returns:
-        Text of the last user message, or empty string if not found
-
-    Example:
-        >>> messages = [
-        ...     {'role': 'user', 'text': 'Hello'},
-        ...     {'role': 'ai', 'text': 'Hi there'},
-        ...     {'role': 'user', 'text': 'How are you?'}
-        ... ]
-        >>> extract_last_user_message(messages)
-        'How are you?'
-    """
-    for msg in reversed(messages):
-        if msg.get('role') == 'user':
-            return msg.get('text', '').strip()
-    return ''
 
 
 # ============================================================================
