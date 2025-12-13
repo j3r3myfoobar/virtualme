@@ -2,26 +2,6 @@
 
 This directory contains the refactored Lambda function code organized into logical modules.
 
-## 📁 Directory Structure
-
-```
-src/
-├── lambda_function.py      # Entry point (Lambda handler)
-├── resume.md              # Knowledge base
-├── rag/                   # RAG pipeline modules
-│   ├── __init__.py
-│   ├── pipeline.py        # LangGraph orchestration
-│   ├── retriever.py       # FAISS vector search
-│   ├── generator.py       # LLM response generation
-│   └── state.py           # LangGraph state definition
-├── loaders/               # Document loaders
-│   ├── __init__.py
-│   └── knowledge_base.py  # Resume loading & splitting
-└── utils/                 # Utility functions
-    ├── __init__.py
-    └── http.py            # HTTP response formatting
-```
-
 ## 🎯 Module Responsibilities
 
 ### lambda_function.py
@@ -49,25 +29,31 @@ src/
 - `generate_node(state)` - Generation step
 - `build_graph()` - Constructs LangGraph workflow
 
-### rag/retriever.py
-**FAISS-based semantic search with multi-backend embeddings**
+### rag/dynamodb_retriever.py
+**DynamoDB-based semantic search with multi-backend embeddings**
 
-- Loads knowledge base documents
+- Loads knowledge base documents into DynamoDB
 - Creates embeddings (Bedrock Titan or OpenAI)
-- Builds FAISS index
-- Performs similarity search
+- Performs similarity search using cosine distance
+- Persistent vector storage across Lambda invocations
 
 **Key functions:**
 - `get_retriever(top_k=3)` - Get/create retriever
 - `reset_retriever()` - Clear cache
 
 **Cold start optimization:**
-- Caches retriever in module-level variable
-- Only builds index once per container
+- Caches vector store in module-level variable
+- Auto-initializes DynamoDB on first run
+- No index rebuilding on cold starts
 
 **Supported backends:**
 - Bedrock Titan Embeddings (production)
 - OpenAI Embeddings (optional)
+
+**Benefits over FAISS:**
+- Persistent storage (survives Lambda cold starts)
+- No need to rebuild index
+- Reduced package size (~160MB smaller)
 
 ### rag/generator.py
 **LLM-based response generation with multi-backend support**
@@ -171,7 +157,7 @@ response = http_response(200, {'text': answer})
 
 ```python
 import os
-from rag.retriever import get_retriever
+from rag.dynamodb_retriever import get_retriever
 from rag.generator import generate_response, update_system_prompt
 
 # Switch models via environment
@@ -227,36 +213,20 @@ The deployment scripts automatically package all modules:
 cd terraform && terraform apply
 ```
 
-**Package contents:**
-```
-deployment.zip
-├── lambda_function.py
-├── resume.md
-├── rag/
-│   ├── __init__.py
-│   ├── pipeline.py
-│   ├── retriever.py
-│   ├── generator.py
-│   └── state.py
-├── loaders/
-│   ├── __init__.py
-│   └── knowledge_base.py
-├── utils/
-│   ├── __init__.py
-│   └── http.py
-└── [dependencies from requirements.txt]
-```
+The deployment automatically packages all modules with their dependencies.
 
 ## 🎨 Design Patterns
 
 ### Singleton Pattern
-- **retriever.py**: Cached retriever instance
+- **dynamodb_retriever.py**: Cached vector store and embeddings
 - **pipeline.py**: Cached LangGraph instance
 
 ### Separation of Concerns
-- **Retrieval** logic isolated in `retriever.py`
+- **Retrieval** logic isolated in `dynamodb_retriever.py`
+- **Vector storage** logic isolated in `vectorstores/dynamodb_vector_store.py`
 - **Generation** logic isolated in `generator.py`
 - **HTTP** logic isolated in `utils/http.py`
+- **Validation** logic isolated in `models/requests.py`
 
 ### Cold Start Optimization
 - Module-level initialization

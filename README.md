@@ -6,7 +6,7 @@
 ![Terraform](https://img.shields.io/badge/Terraform-IaC-purple)
 ![LocalStack](https://img.shields.io/badge/LocalStack-Local%20Dev-yellow)
 
-A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Generation (RAG)** to answer questions accurately based on your personal data (resume, bio, etc.). Built with AWS Lambda, AWS Bedrock (Llama 3.2), LangChain, LangGraph, and FAISS for efficient vector similarity search. Supports local development with LM Studio.
+A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Generation (RAG)** to answer questions accurately based on your personal data (resume, bio, etc.). Built with AWS Lambda, AWS Bedrock (Llama 3.2), LangChain, LangGraph, and DynamoDB for persistent vector storage. Supports local development with LM Studio.
 
 ## 🌟 Features
 
@@ -31,7 +31,7 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
                         │      LangGraph RAG Pipeline         │
                         ├─────────────────────────────────────┤
                         │  1. Retrieve Node                   │
-                        │     ↓ (FAISS Vector Search)         │
+                        │     ↓ (DynamoDB Vector Search)      │
                         │  2. Generate Node                   │
                         │     ↓ (Bedrock: Llama 3.2)         │
                         │  3. Response                        │
@@ -40,8 +40,8 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
 
 ### RAG Data Flow
 
-1. **Indexing** (Cold Start): `resume.md` → MarkdownHeaderTextSplitter → Bedrock Titan Embeddings → FAISS Index
-2. **Retrieval** (Per Request): User Question → Embedding → FAISS Search → Top 3 Relevant Chunks
+1. **Indexing** (Cold Start): `resume.md` → MarkdownHeaderTextSplitter → Bedrock Titan Embeddings → DynamoDB Vector Store
+2. **Retrieval** (Per Request): User Question → Embedding → DynamoDB Vector Search → Top 3 Relevant Chunks
 3. **Generation**: System Prompt + Context + Question → Bedrock Llama 3.2 → Grounded Response
 
 ## 📁 Project Structure
@@ -53,7 +53,7 @@ virtualme/
 │   ├── resume.md         # Knowledge base
 │   ├── rag/              # RAG pipeline modules
 │   │   ├── pipeline.py   # LangGraph orchestration
-│   │   ├── retriever.py  # FAISS vector search
+│   │   ├── dynamodb_retriever.py  # DynamoDB vector search
 │   │   ├── generator.py  # LLM response generation
 │   │   └── state.py      # State definitions
 │   ├── loaders/          # Document loaders
@@ -151,18 +151,38 @@ virtualme/
    llm_temperature = "0.3"
    ```
 
-4. **Deploy to AWS**
+4. **(Optional) Setup Remote State Backend**
+   ```bash
+   # For team collaboration and state locking
+   ./scripts/setup-terraform-backend.sh
+   cd terraform
+   cp backend.tf.example backend.tf
+   # Update YOUR-ACCOUNT-ID in backend.tf
+   ```
+
+5. **Deploy to AWS**
    ```bash
    cd terraform
    terraform init
-   terraform plan
-   terraform apply
+   terraform plan  # Review changes
+   terraform apply # Deploy infrastructure
    # or use the automated script: ../scripts/aws-deploy.sh
    ```
 
-5. **Access Your Chatbot**
-   - The deployment script will output the S3 website URL
-   - No additional configuration needed - API endpoint is auto-injected!
+6. **Configure CloudWatch Alarms (Optional)**
+   ```bash
+   # Subscribe to SNS topic for email alerts
+   aws sns subscribe \
+     --topic-arn $(terraform output -raw sns_topic_arn) \
+     --protocol email \
+     --notification-endpoint your-email@example.com
+   ```
+
+7. **Access Your Chatbot**
+   - Frontend: https://chat.lemaire.tel
+   - API: https://api.lemaire.tel/chat
+   - CloudWatch Alarms: AWS Console → CloudWatch
+   - X-Ray Traces: AWS Console → X-Ray
 
 ### Model Switching
 
@@ -237,16 +257,28 @@ Edit `frontend/index.html` to change:
 ### AWS Production with Bedrock (Estimated Monthly)
 - **Lambda**: ~$0.20 per 1M requests + compute time
 - **API Gateway**: ~$1.00 per 1M requests
-- **S3**: ~$0.023 per GB stored (~$0.01/month for this project)
+- **S3**: ~$0.023 per GB stored (~$0.01/month for frontend + state)
+- **DynamoDB**: Pay-per-request (~$1.25 per 1M reads, ~$6.25 per 1M writes)
+- **CloudWatch**: First 10 alarms free, $0.10/alarm/month after
+- **X-Ray**: First 100,000 traces/month free, $5 per 1M traces after
 - **Bedrock Llama 3.2 3B**: ~$0.10 per 1M input tokens, ~$0.13 per 1M output tokens
 - **Bedrock Titan Embeddings**: ~$0.10 per 1M tokens
 
-**Example**: 10,000 requests/month = ~$1.50/month (AWS) + ~$0.50/month (Bedrock) = **$2/month**
+**Example (10,000 requests/month)**:
+- AWS Services: ~$1.50/month (Lambda + API Gateway + S3)
+- DynamoDB: ~$0.15/month (10k reads for retrieval)
+- Bedrock: ~$0.50/month (LLM + embeddings)
+- **Total: ~$2.15/month**
 
 **Cost Comparison**:
 - **Llama 3.2 3B**: Most cost-effective, good quality
 - **Llama 3.2 8B**: 2x cost, better reasoning
 - **Claude 3 Haiku**: 3x cost, best quality
+
+**Cost Optimization Tips**:
+- DynamoDB on-demand pricing perfect for low traffic
+- X-Ray sampling reduces trace costs
+- CloudWatch log retention set to 7 days (configurable)
 
 ## 🧪 Testing
 
@@ -363,7 +395,7 @@ def lambda_handler(event, context):
 
 ```python
 workflow = StateGraph(GraphState)
-workflow.add_node("retrieve", retrieve_node)  # FAISS search
+workflow.add_node("retrieve", retrieve_node)  # DynamoDB vector search
 workflow.add_node("generate", generate_node)  # LLM call
 workflow.set_entry_point("retrieve")
 workflow.add_edge("retrieve", "generate")
@@ -374,41 +406,89 @@ This creates a state machine that ensures proper data flow and error handling.
 
 ### Vector Store Selection
 
-**Why FAISS?**
-- ✅ In-memory (no external database needed)
-- ✅ Fast similarity search (<10ms for small datasets)
-- ✅ No additional AWS costs
-- ✅ Perfect for <1000 documents
+**Why DynamoDB?**
+- ✅ Persistent storage (survives Lambda cold starts)
+- ✅ Serverless and scalable (no infrastructure to manage)
+- ✅ Fast similarity search with custom vector implementation
+- ✅ Integrated with AWS ecosystem
+- ✅ Pay-per-request pricing (cost-effective for low traffic)
 
-**Alternatives for larger datasets**:
-- Pinecone (managed vector DB)
-- Weaviate (self-hosted)
-- Amazon OpenSearch
+**Benefits over in-memory solutions**:
+- No need to rebuild index on every cold start
+- State persists across deployments
+- Can handle larger datasets without memory constraints
 
 ## 🔐 Security Best Practices
 
-1. **Never commit API keys**: Use environment variables or AWS Secrets Manager
-2. **Enable API Gateway throttling**: Prevent abuse
-3. **Use AWS WAF**: Add web application firewall for production
-4. **Restrict CORS**: Change `allow_origins` from `["*"]` to specific domains
-5. **Enable CloudWatch Alarms**: Monitor errors and throttles
+This project implements production-grade security measures:
+
+1. **IAM Least Privilege**: Lambda IAM policies scoped to specific resources only
+2. **CORS Restricted**: API Gateway only accepts requests from `https://chat.lemaire.tel`
+3. **No Sensitive Data in Logs**: Error details logged internally, generic messages returned to clients
+4. **API Rate Limiting**: 50 requests/second, 100 burst limit to prevent abuse
+5. **Encrypted State**: S3 backend encryption enabled, DynamoDB encryption at rest
+6. **X-Ray Tracing**: Full request tracing without exposing sensitive data
+7. **CloudWatch Alarms**: Automated monitoring for security events
+
+**Additional Recommendations**:
+- Use AWS Secrets Manager for sensitive configuration
+- Enable AWS WAF for additional protection
+- Regularly rotate AWS credentials
+- Review CloudWatch logs for suspicious activity
 
 ## 📈 Monitoring and Observability
 
+This project includes comprehensive production monitoring:
+
+### CloudWatch Alarms (Auto-configured)
+
+**Lambda Alarms:**
+- Errors: >5 errors in 2 minutes
+- Throttles: Any throttling detected
+- Duration: Average >25 seconds (near timeout)
+- Concurrent Executions: >50 concurrent invocations
+
+**API Gateway Alarms:**
+- 5xx Errors: >5 server errors in 1 minute
+- 4xx Errors: >50 client errors in 5 minutes
+
+**SNS Topic**: `virtual-me-chatbot-prod-alarms`
+- Configure email/SMS subscriptions in AWS Console
+
+### X-Ray Tracing
+
+Full distributed tracing enabled:
+- API Gateway → Lambda → Bedrock → DynamoDB
+- View traces: AWS Console → X-Ray → Service Map
+- Identify bottlenecks and latency issues
+- Debug production issues without additional logging
+
 ### Key Metrics to Monitor
 
-1. **Lambda Duration**: Should be <3s
-2. **Lambda Errors**: Should be <1%
+1. **Lambda Duration**: Should be <3s (cold start may be higher)
+2. **Lambda Errors**: Target <1%
 3. **API Gateway 4xx/5xx**: Track client and server errors
-4. **Bedrock API Latency**: Baseline ~300-800ms (Llama 3.2), ~500-1000ms (Claude)
+4. **Bedrock API Latency**: Baseline ~300-800ms (Llama 3.2)
+5. **DynamoDB Read/Write**: Monitor consumed capacity
 
-### CloudWatch Dashboard
+### Accessing Monitoring
 
-Create a dashboard with:
+**CloudWatch Alarms:**
 ```bash
-aws cloudwatch put-dashboard \
-  --dashboard-name VirtualMeChatbot \
-  --dashboard-body file://dashboard.json
+aws cloudwatch describe-alarms --alarm-names \
+  virtual-me-chatbot-prod-errors \
+  virtual-me-chatbot-prod-throttles
+```
+
+**X-Ray Traces:**
+```bash
+# View service map
+aws xray get-service-graph --start-time $(date -u -d '1 hour ago' +%s) --end-time $(date +%s)
+```
+
+**Lambda Logs:**
+```bash
+aws logs tail /aws/lambda/virtual-me-chatbot-prod --follow
 ```
 
 ## 🤝 Contributing
@@ -442,6 +522,6 @@ MIT License - feel free to use this for personal or commercial projects!
 
 ---
 
-Built with ❤️ using AWS Lambda, AWS Bedrock, LangChain, LangGraph, and FAISS
+Built with ❤️ using AWS Lambda, AWS Bedrock, LangChain, LangGraph, and DynamoDB
 
 ⭐ Star this repo if you find it useful!

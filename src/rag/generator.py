@@ -12,10 +12,8 @@ from typing import Optional
 from langchain_core.messages import HumanMessage
 from langchain_core.language_models import BaseChatModel
 
-# Import config
-import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from config import get_model_config, ModelConfig
+# Relative imports (IntelliJ-friendly)
+from ..config import get_model_config, ModelConfig
 
 
 # System prompt that defines the chatbot's persona and constraints

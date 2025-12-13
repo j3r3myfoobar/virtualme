@@ -1,7 +1,6 @@
 """
 DynamoDB-based retriever for semantic search over knowledge base.
 
-Replaces FAISS with DynamoDB for vector storage, eliminating 160MB of dependencies.
 """
 
 import os
@@ -9,12 +8,9 @@ from typing import Optional, List
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
-# Import config
-import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from config import get_embedding_config
-from vectorstores.dynamodb_vector_store import DynamoDBVectorStore
-from loaders.knowledge_base import load_knowledge_base
+from ..config import get_embedding_config
+from ..vectorstores.dynamodb_vector_store import DynamoDBVectorStore
+from ..loaders.knowledge_base import load_knowledge_base
 
 # Global retriever cache (cold start optimization)
 _vector_store: Optional[DynamoDBVectorStore] = None

@@ -10,10 +10,6 @@ from typing import List
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
 
-# Import path setup
-import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
 
 def load_knowledge_base() -> List[Document]:
     """
