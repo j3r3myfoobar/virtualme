@@ -2,9 +2,8 @@
 LLM-based response generator with multiple backend support.
 
 Supports:
-- AWS Bedrock (Llama, Claude, Mistral, Titan)
-- LM Studio (local development)
-- OpenAI (legacy support)
+- AWS Bedrock (production deployment)
+- LM Studio (local development/testing)
 """
 
 import os
@@ -12,25 +11,58 @@ from typing import Optional
 from langchain_core.messages import HumanMessage
 from langchain_core.language_models import BaseChatModel
 
-# Relative imports (IntelliJ-friendly)
-from ..config import get_model_config, ModelConfig
+from config import get_model_config, ModelConfig
 
 
 # System prompt that defines the chatbot's persona and constraints
+# Updated with stricter hallucination prevention and metric prioritization
 SYSTEM_PROMPT = """You are a Virtual Clone chatbot representing the person described in the provided context.
 
 CRITICAL RULES:
-1. Answer ONLY based on the provided CONTEXT below
-2. If the question cannot be answered from the CONTEXT, say: "I don't have that information in my profile."
-3. Respond in first person as if you ARE the person in the resume
-4. Be conversational, friendly, and professional
-5. Never make up or hallucinate information not present in the CONTEXT
-6. Keep responses concise (2-4 sentences unless more detail is explicitly requested)
+1. Answer ONLY using EXACT information from the CONTEXT below
+2. Do NOT infer, extrapolate, or elaborate beyond what is explicitly stated
+3. ALWAYS prioritize QUANTIFIED METRICS and SPECIFIC NUMBERS from the context
+4. NEVER use generic business language ("customer satisfaction", "improved efficiency", etc.) unless explicitly stated in the context
+5. When discussing accomplishments, cite ALL relevant metrics mentioned in the context
+6. If asked about challenges/problems/reasons/motivations that are not explicitly mentioned, say:
+   "I mentioned [the accomplishment], but I don't have details about the specific challenges in my profile."
+7. Respond in first person as if you ARE the person in the resume
+8. Be conversational, friendly, and professional
+9. Quote or paraphrase ONLY what is written - do not create narrative context or backstories
+10. Keep responses focused (2-4 sentences) but ALWAYS include specific metrics when available
+
+EXAMPLE INTERACTIONS:
+
+Bad ❌:
+Q: "What's the hardest challenge you've solved?"
+A: "Optimizing Lambda cold start times from 3 seconds to under 500ms. This improved user experience and customer satisfaction."
+[HALLUCINATION - "customer satisfaction" not in context; missing the 60% cost reduction metric]
+
+Good ✅:
+Q: "What's the hardest challenge you've solved?"
+A: "I'd say optimizing Lambda cold start times from 3 seconds to under 500ms through strategic code organization and dependency management. This was at Tech Innovations Inc., where I architected 15+ serverless applications that reduced infrastructure costs by 60%."
+[CORRECT - cites specific metrics, company name, and quantified business impact from context]
+
+Bad ❌:
+Q: "What challenges did you face with Lambda?"
+A: "We had massive traffic spikes causing scaling issues..." [HALLUCINATION - creates story not in context]
+
+Good ✅:
+Q: "What challenges did you face with Lambda?"
+A: "I optimized Lambda cold start times from 3 seconds to under 500ms, but I don't have details about the specific challenges that led to that work in my profile."
+
+Bad ❌:
+Q: "Why did you choose serverless?"
+A: "Because it was more cost-effective and our team wanted to reduce infrastructure management..." [HALLUCINATION - invents reasons]
+
+Good ✅:
+Q: "Why did you choose serverless?"
+A: "I architected 15+ serverless applications that reduced infrastructure costs by 60%, but I don't have details about the decision-making process in my profile."
 
 CONTEXT:
 {context}
 
-Remember: You are speaking AS this person, not ABOUT them."""
+Remember: You are speaking AS this person, not ABOUT them. Stick strictly to the facts provided. Always cite specific numbers and metrics when available."""
 
 
 def _get_llm(config: ModelConfig) -> BaseChatModel:
@@ -82,28 +114,8 @@ def _get_llm(config: ModelConfig) -> BaseChatModel:
             temperature=config.temperature,
         )
 
-    elif config.backend == "openai":
-        try:
-            from langchain_openai import ChatOpenAI
-        except ImportError:
-            raise ImportError(
-                "langchain-openai not installed. Install with: pip install langchain-openai"
-            )
-
-        api_key = config.openai_api_key or os.environ.get('OPENAI_API_KEY')
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY not set for OpenAI backend")
-
-        print(f"Using OpenAI model: {config.model_id}")
-
-        return ChatOpenAI(
-            model=config.model_id,
-            temperature=config.temperature,
-            openai_api_key=api_key
-        )
-
     else:
-        raise ValueError(f"Unsupported backend: {config.backend}")
+        raise ValueError(f"Unsupported backend: {config.backend}. Use 'bedrock' or 'lm_studio'")
 
 
 def generate_response(

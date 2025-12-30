@@ -13,6 +13,30 @@ from utils.http import http_response
 from models.requests import ChatRequest, ErrorResponse
 
 
+def extract_last_user_message(messages: list) -> str:
+    """
+    Extract the last user message from a conversation history.
+
+    Args:
+        messages: List of message dicts with 'role' and 'text' fields
+
+    Returns:
+        The text of the last user message, or empty string if none found
+
+    Example:
+        >>> messages = [{'role': 'user', 'text': 'Hello'}]
+        >>> extract_last_user_message(messages)
+        'Hello'
+    """
+    # Find last message from user
+    for message in reversed(messages):
+        if message.get('role') == 'user':
+            text = message.get('text', '')
+            return text.strip()
+
+    return ''
+
+
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Main AWS Lambda handler function.

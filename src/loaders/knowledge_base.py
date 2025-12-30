@@ -5,10 +5,11 @@ Handles loading and splitting the resume.md file into chunks
 while maintaining context hierarchy from markdown headers.
 """
 
-import os
 from typing import List
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
+
+from constants import RESUME_PATH, MARKDOWN_HEADERS_TO_SPLIT
 
 
 def load_knowledge_base() -> List[Document]:
@@ -32,26 +33,22 @@ def load_knowledge_base() -> List[Document]:
         >>> docs[0].metadata
         {'Header 1': 'John Doe', 'Header 2': 'Experience'}
     """
-    # Get path to resume.md (same directory as this file's parent)
-    resume_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        'resume.md'
-    )
+    # Check if resume exists
+    if not RESUME_PATH.exists():
+        raise FileNotFoundError(
+            f"Resume not found at {RESUME_PATH}. "
+            f"Please ensure resume.md exists in the src directory."
+        )
 
     # Read the resume markdown file
-    with open(resume_path, 'r', encoding='utf-8') as f:
-        resume_content = f.read()
-
-    # Define headers to split on - maintains context hierarchy
-    headers_to_split_on = [
-        ("#", "Header 1"),
-        ("##", "Header 2"),
-        ("###", "Header 3"),
-    ]
+    try:
+        resume_content = RESUME_PATH.read_text(encoding='utf-8')
+    except IOError as e:
+        raise IOError(f"Failed to read resume file: {e}")
 
     # Split the markdown maintaining header context
     markdown_splitter = MarkdownHeaderTextSplitter(
-        headers_to_split_on=headers_to_split_on,
+        headers_to_split_on=MARKDOWN_HEADERS_TO_SPLIT,
         strip_headers=False
     )
 

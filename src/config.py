@@ -2,18 +2,19 @@
 Configuration for LLM backends and models.
 
 Supports multiple backends:
-- Bedrock (production)
-- LM Studio (local development)
-- OpenAI (legacy support)
+- Bedrock (production deployment)
+- LM Studio (local development/testing)
 """
 
 import os
 from typing import Literal, Optional
 from dataclasses import dataclass
 
+from constants import DEFAULT_LLM_MODEL, DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS
+
 
 # Backend types
-LLMBackend = Literal["bedrock", "lm_studio", "openai"]
+LLMBackend = Literal["bedrock", "lm_studio"]
 
 
 @dataclass
@@ -21,12 +22,11 @@ class ModelConfig:
     """Configuration for LLM model."""
     backend: LLMBackend
     model_id: str
-    temperature: float = 0.3
-    max_tokens: Optional[int] = None
+    temperature: float = DEFAULT_TEMPERATURE
+    max_tokens: Optional[int] = DEFAULT_MAX_TOKENS
     # Backend-specific settings
     aws_region: str = "us-east-1"
     lm_studio_base_url: str = "http://localhost:1234/v1"
-    openai_api_key: Optional[str] = None
 
 
 # Available Bedrock models
@@ -67,12 +67,11 @@ def get_model_config() -> ModelConfig:
     Get model configuration from environment variables.
 
     Environment Variables:
-        LLM_BACKEND: Backend to use (bedrock, lm_studio, openai)
+        LLM_BACKEND: Backend to use (bedrock, lm_studio)
         LLM_MODEL: Model identifier
         LLM_TEMPERATURE: Sampling temperature (0.0-1.0)
         AWS_REGION: AWS region for Bedrock
         LM_STUDIO_BASE_URL: Base URL for LM Studio
-        OPENAI_API_KEY: OpenAI API key (if using OpenAI)
 
     Returns:
         ModelConfig instance
@@ -83,17 +82,13 @@ def get_model_config() -> ModelConfig:
 
         # Local development (LM Studio)
         LLM_BACKEND=lm_studio LLM_MODEL=llama-3.2-3b
-
-        # Legacy (OpenAI)
-        LLM_BACKEND=openai OPENAI_API_KEY=sk-xxx
     """
     backend = os.environ.get("LLM_BACKEND", "bedrock").lower()
-    model = os.environ.get("LLM_MODEL", "llama-3.2-3b")
-    temperature = float(os.environ.get("LLM_TEMPERATURE", "0.3"))
+    model = os.environ.get("LLM_MODEL", DEFAULT_LLM_MODEL)
+    temperature = float(os.environ.get("LLM_TEMPERATURE", str(DEFAULT_TEMPERATURE)))
     # AWS_REGION is reserved in Lambda, use AWS_DEFAULT_REGION instead
     aws_region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION", "us-east-1")
     lm_studio_url = os.environ.get("LM_STUDIO_BASE_URL", "http://localhost:1234/v1")
-    openai_key = os.environ.get("OPENAI_API_KEY")
 
     # Resolve model ID based on backend
     if backend == "bedrock":
@@ -106,8 +101,7 @@ def get_model_config() -> ModelConfig:
         model_id=model_id,
         temperature=temperature,
         aws_region=aws_region,
-        lm_studio_base_url=lm_studio_url,
-        openai_api_key=openai_key
+        lm_studio_base_url=lm_studio_url
     )
 
 
@@ -116,7 +110,7 @@ def get_embedding_config() -> dict:
     Get embedding configuration from environment variables.
 
     Environment Variables:
-        EMBEDDING_BACKEND: Backend to use (bedrock, openai)
+        EMBEDDING_BACKEND: Backend to use (bedrock)
         EMBEDDING_MODEL: Model identifier
 
     Returns:
@@ -153,12 +147,6 @@ def list_available_models(backend: LLMBackend = "bedrock") -> dict:
     elif backend == "lm_studio":
         return {
             "local-model": "Local model in LM Studio (check LM Studio UI)"
-        }
-    elif backend == "openai":
-        return {
-            "gpt-4o-mini": "gpt-4o-mini",
-            "gpt-4o": "gpt-4o",
-            "gpt-4": "gpt-4-turbo"
         }
     else:
         return {}

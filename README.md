@@ -6,7 +6,7 @@
 ![Terraform](https://img.shields.io/badge/Terraform-IaC-purple)
 ![LocalStack](https://img.shields.io/badge/LocalStack-Local%20Dev-yellow)
 
-A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Generation (RAG)** to answer questions accurately based on your personal data (resume, bio, etc.). Built with AWS Lambda, AWS Bedrock (Llama 3.2), LangChain, LangGraph, and DynamoDB for persistent vector storage. Supports local development with LM Studio.
+A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Generation (RAG)** to answer questions accurately based on your personal data (resume, bio, etc.). Built with AWS Lambda, AWS Bedrock (Mixtral 8x7B), LangChain, LangGraph, and DynamoDB for persistent vector storage. Supports local development with LM Studio.
 
 ## 🌟 Features
 
@@ -33,7 +33,7 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
                         │  1. Retrieve Node                   │
                         │     ↓ (DynamoDB Vector Search)      │
                         │  2. Generate Node                   │
-                        │     ↓ (Bedrock: Llama 3.2)         │
+                        │     ↓ (Bedrock: Mixtral 8x7B)      │
                         │  3. Response                        │
                         └─────────────────────────────────────┘
 ```
@@ -42,7 +42,64 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
 
 1. **Indexing** (Cold Start): `resume.md` → MarkdownHeaderTextSplitter → Bedrock Titan Embeddings → DynamoDB Vector Store
 2. **Retrieval** (Per Request): User Question → Embedding → DynamoDB Vector Search → Top 3 Relevant Chunks
-3. **Generation**: System Prompt + Context + Question → Bedrock Llama 3.2 → Grounded Response
+3. **Generation**: System Prompt + Context + Question → Bedrock Mixtral 8x7B → Grounded Response
+
+## ☁️ AWS Services Used
+
+### Core Services (Essential)
+
+| Service | Purpose | Configuration | Cost Impact |
+|---------|---------|---------------|-------------|
+| **Lambda** | Main compute - runs the chatbot handler | Python 3.11, 512 MB, 30s timeout | 💰 Low (~$0.20/month) |
+| **API Gateway** (HTTP API) | REST API endpoint for chatbot | HTTP API (cheaper than REST API) | 💰 Very Low (~$0.10/month) |
+| **DynamoDB** | Vector storage for document embeddings | On-demand capacity | 💰💰 Medium (~$1-5/month) |
+| **Bedrock** | LLM models (Mixtral 8x7B) | Mixtral 8x7B, temperature 0.1 | 💰💰 Medium (~$1-10/month) |
+
+### Frontend & CDN
+
+| Service | Purpose | Configuration | Cost Impact |
+|---------|---------|---------------|-------------|
+| **S3** | Frontend hosting + Lambda deployment packages | 2 buckets (frontend, deployments) | 💰 Very Low (~$0.05/month) |
+| **CloudFront** | CDN for frontend (https://chat.lemaire.tel) | Origin Access Identity (OAI) | 💰 Low (~$0.10/month) |
+
+### Networking & DNS
+
+| Service | Purpose | Configuration | Cost Impact |
+|---------|---------|---------------|-------------|
+| **Route53** | DNS for custom domains | lemaire.tel zone | 💰 Low ($0.50/month per hosted zone) |
+| **ACM** (Certificate Manager) | SSL/TLS certificates | Wildcard cert for *.lemaire.tel | 💰 **Free** |
+
+### Security & Access
+
+| Service | Purpose | Configuration | Cost Impact |
+|---------|---------|---------------|-------------|
+| **IAM** | Roles and permissions | Lambda execution role + policies | 💰 **Free** |
+
+### Monitoring & Operations
+
+| Service | Purpose | Configuration | Cost Impact |
+|---------|---------|---------------|-------------|
+| **CloudWatch Logs** | Lambda and API Gateway logs | 7-day retention | 💰 Very Low (~$0.10/month) |
+| **CloudWatch Alarms** | Error rate monitoring | SNS notifications | 💰 Very Low (~$0.10/month) |
+| **X-Ray** | Distributed tracing | Active tracing enabled | 💰 Very Low (~$0.05/month) |
+| **SNS** | Alert notifications | Alarm topic | 💰 Very Low (~$0.05/month) |
+
+### Cost Summary
+
+**Total Services: 13**
+
+| Category | Estimated Monthly Cost |
+|----------|----------------------|
+| Lambda + API Gateway | $0.30 - $1.00 |
+| DynamoDB | $1.00 - $5.00 |
+| Bedrock (Mixtral 8x7B) | $1.00 - $10.00 |
+| S3 + CloudFront | $0.15 - $0.50 |
+| Route53 | $0.50 |
+| Monitoring | $0.25 - $0.50 |
+| ACM & IAM | $0.00 (Free) |
+| **Total** | **$3 - $18/month** |
+
+*For personal use (~100 conversations/month), typically **$5-8/month***
 
 ## 📁 Project Structure
 

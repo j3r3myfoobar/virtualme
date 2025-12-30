@@ -10,6 +10,8 @@ from typing import List, Tuple, Optional
 import boto3
 from boto3.dynamodb.conditions import Attr
 
+from constants import DEFAULT_AWS_REGION
+
 
 class DynamoDBVectorStore:
     """
@@ -17,13 +19,13 @@ class DynamoDBVectorStore:
     Stores text chunks with their embeddings and performs cosine similarity search.
     """
 
-    def __init__(self, table_name: str, region: str = "eu-west-3"):
+    def __init__(self, table_name: str, region: str = DEFAULT_AWS_REGION):
         """
         Initialize DynamoDB vector store.
 
         Args:
             table_name: Name of DynamoDB table
-            region: AWS region
+            region: AWS region (defaults to DEFAULT_AWS_REGION from constants)
         """
         self.table_name = table_name
         self.region = region

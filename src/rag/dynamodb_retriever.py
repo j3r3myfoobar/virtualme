@@ -8,9 +8,10 @@ from typing import Optional, List
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
-from ..config import get_embedding_config
-from ..vectorstores.dynamodb_vector_store import DynamoDBVectorStore
-from ..loaders.knowledge_base import load_knowledge_base
+from config import get_embedding_config
+from vectorstores.dynamodb_vector_store import DynamoDBVectorStore
+from loaders.knowledge_base import load_knowledge_base
+from constants import RAG_TOP_K_CHUNKS, DEFAULT_AWS_REGION
 
 # Global retriever cache (cold start optimization)
 _vector_store: Optional[DynamoDBVectorStore] = None
@@ -86,7 +87,7 @@ def _initialize_vector_store() -> DynamoDBVectorStore:
         Initialized DynamoDBVectorStore
     """
     table_name = os.environ.get('DYNAMODB_TABLE', 'virtual-me-vectors-prod')
-    region = os.environ.get('AWS_DEFAULT_REGION', 'eu-west-3')
+    region = os.environ.get('AWS_DEFAULT_REGION', DEFAULT_AWS_REGION)
 
     vector_store = DynamoDBVectorStore(table_name=table_name, region=region)
 
@@ -119,7 +120,7 @@ def _initialize_vector_store() -> DynamoDBVectorStore:
     return vector_store
 
 
-def get_retriever(top_k: int = 3):
+def get_retriever(top_k: int = RAG_TOP_K_CHUNKS):
     """
     Get or create the DynamoDB retriever.
 
@@ -128,15 +129,15 @@ def get_retriever(top_k: int = 3):
     the cached instance.
 
     Args:
-        top_k: Number of most relevant documents to retrieve
+        top_k: Number of most relevant documents to retrieve (default: RAG_TOP_K_CHUNKS)
 
     Returns:
         Retriever-like object with get_relevant_documents method
 
     Example:
-        >>> retriever = get_retriever(top_k=3)
+        >>> retriever = get_retriever(top_k=RAG_TOP_K_CHUNKS)
         >>> docs = retriever.get_relevant_documents("What is your experience?")
-        >>> len(docs) <= 3
+        >>> len(docs) <= RAG_TOP_K_CHUNKS
         True
     """
     global _vector_store

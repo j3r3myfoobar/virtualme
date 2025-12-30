@@ -8,6 +8,12 @@ Prevents common security issues like injection attacks and oversized payloads.
 from typing import List, Literal
 from pydantic import BaseModel, Field, field_validator
 
+from constants import (
+    MAX_MESSAGE_LENGTH,
+    MAX_CONVERSATION_LENGTH,
+    CONVERSATION_WARNING_THRESHOLD
+)
+
 
 class Message(BaseModel):
     """
@@ -28,7 +34,7 @@ class Message(BaseModel):
     text: str = Field(
         ...,
         min_length=1,
-        max_length=5000,
+        max_length=MAX_MESSAGE_LENGTH,
         description="Message text content",
         examples=["What is your experience with Python?"]
     )
@@ -74,7 +80,7 @@ class ChatRequest(BaseModel):
     messages: List[Message] = Field(
         ...,
         min_length=1,
-        max_length=50,
+        max_length=MAX_CONVERSATION_LENGTH,
         description="List of conversation messages",
         examples=[[
             {"role": "user", "text": "Hello"},
@@ -102,12 +108,12 @@ class ChatRequest(BaseModel):
     @classmethod
     def validate_reasonable_history(cls, v: List[Message]) -> List[Message]:
         """Warn about very long conversation histories."""
-        if len(v) > 20:
+        if len(v) > CONVERSATION_WARNING_THRESHOLD:
             # Log warning but allow (for monitoring)
             import logging
             logging.getLogger(__name__).warning(
-                "long_conversation_history",
-                message_count=len(v)
+                f"Long conversation history detected: {len(v)} messages "
+                f"(threshold: {CONVERSATION_WARNING_THRESHOLD})"
             )
 
         return v

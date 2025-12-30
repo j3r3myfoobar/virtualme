@@ -26,9 +26,9 @@ variable "project_name" {
 }
 
 variable "llm_model" {
-  description = "LLM model identifier (e.g., llama-3.2-3b for Bedrock)"
+  description = "LLM model identifier for Bedrock (e.g., mixtral-8x7b, llama-3.2-3b)"
   type        = string
-  default     = "llama-3.2-3b"
+  default     = "mixtral-8x7b"
 }
 
 variable "embedding_model" {
@@ -38,9 +38,9 @@ variable "embedding_model" {
 }
 
 variable "llm_temperature" {
-  description = "LLM temperature for response generation (0.0-1.0)"
+  description = "LLM temperature for response generation (0.0-1.0, lower = more factual)"
   type        = string
-  default     = "0.3"
+  default     = "0.1"
 
   validation {
     condition     = can(tonumber(var.llm_temperature)) && tonumber(var.llm_temperature) >= 0 && tonumber(var.llm_temperature) <= 1
