@@ -1,30 +1,15 @@
-# Terraform Variables Configuration
-# Copy this file to terraform.tfvars and fill in your values
+# Copy this to terraform.tfvars and fill in your values
 
-# AWS Configuration
-aws_region  = "us-east-1"
-environment = "prod"
-
-# Project Configuration
+aws_region   = "eu-west-3"
+environment  = "prod"
 project_name = "virtual-me-chatbot"
 
-# LLM Configuration (Bedrock)
-# Available Bedrock models:
-# - llama-3.2-1b, llama-3.2-3b, llama-3.2-8b (Meta Llama)
-# - claude-3-haiku, claude-3-sonnet (Anthropic)
-# - mistral-7b (Mistral AI)
-llm_model       = "llama-3.2-3b"
-llm_temperature = "0.3"
+# Bedrock models - pick one:
+# llama-3.2-1b, llama-3.2-3b, llama-3.2-8b, claude-3-haiku, claude-3-sonnet, mistral-7b
+llm_model       = "nova-2-lite"
+llm_temperature = "0.1"
 
-# Embedding Configuration (Bedrock)
-# Available embedding models:
-# - titan-embed-text-v1, titan-embed-text-v2 (Amazon)
-# - cohere-embed-english, cohere-embed-multilingual (Cohere)
+# Embeddings - titan-embed-text-v2 works well
 embedding_model = "titan-embed-text-v2"
 
-# OpenAI Configuration (optional - only for local LM Studio development)
-# Leave empty if using Bedrock
-openai_api_key = ""
-
-# Logging Configuration
 log_retention_days = 7

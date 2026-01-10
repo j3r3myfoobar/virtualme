@@ -213,6 +213,10 @@ package/
 response.json
 output.json
 outputs.json
+generated-diagrams/
+
+# Knowledge base (personal data)
+src/knowledge_base/
 
 # Claude Code configuration
 .claude/

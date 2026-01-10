@@ -1,18 +1,15 @@
 """
-LangGraph RAG pipeline orchestration.
-
-Implements the complete Retrieval Augmented Generation workflow
-using LangGraph state machine.
+RAG pipeline using LangGraph. Retrieves context then generates response.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, List
 from langchain_core.messages import AIMessage
 from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
 
 from .state import GraphState
-from .dynamodb_retriever import get_retriever  # Using DynamoDB instead of FAISS
+from .dynamodb_retriever import get_retriever
 from .generator import generate_response
 from utils.logging import get_logger
 
@@ -20,80 +17,25 @@ logger = get_logger(__name__)
 
 
 def retrieve_node(state: GraphState) -> Dict[str, str]:
-    """
-    Retrieval Node: Queries the DynamoDB vector store for relevant context.
-
-    Args:
-        state: Current graph state containing the user question
-
-    Returns:
-        Dictionary with retrieved context
-
-    Example:
-        >>> state = {"question": "What is your experience?", ...}
-        >>> result = retrieve_node(state)
-        >>> "context" in result
-        True
-    """
+    """Fetch relevant documents from the vector store."""
     question = state["question"]
 
-    # Get retriever and fetch relevant documents
     retriever = get_retriever()
     documents: List[Document] = retriever.get_relevant_documents(question)
-
-    # Format context from retrieved documents
     context = format_context(documents)
 
-    logger.info("Retrieved %d relevant documents", len(documents))
-
+    logger.info("Retrieved %d documents", len(documents))
     return {"context": context}
 
 
 def generate_node(state: GraphState) -> Dict[str, List[AIMessage]]:
-    """
-    Generation Node: Uses LLM to generate response based on retrieved context.
-
-    Args:
-        state: Current graph state with context and question
-
-    Returns:
-        Dictionary with AI message response
-
-    Example:
-        >>> state = {
-        ...     "context": "I have 8 years experience...",
-        ...     "question": "What is your experience?",
-        ...     ...
-        ... }
-        >>> result = generate_node(state)
-        >>> "messages" in result
-        True
-    """
-    context = state["context"]
-    question = state["question"]
-
-    # Generate response using LLM
-    response_text = generate_response(context, question)
-
+    """Generate response using the LLM."""
+    response_text = generate_response(state["context"], state["question"])
     return {"messages": [AIMessage(content=response_text)]}
 
 
 def format_context(documents: List[Document]) -> str:
-    """
-    Format retrieved documents into a context string.
-
-    Args:
-        documents: List of retrieved Document objects
-
-    Returns:
-        Formatted context string with section headers
-
-    Example:
-        >>> docs = [Document(page_content="text", metadata={"Header 2": "Experience"})]
-        >>> context = format_context(docs)
-        >>> "Experience" in context
-        True
-    """
+    """Combine documents into a single context string."""
     return "\n\n".join([
         f"Section: {doc.metadata.get('Header 2', 'N/A')}\n{doc.page_content}"
         for doc in documents
@@ -101,27 +43,12 @@ def format_context(documents: List[Document]) -> str:
 
 
 def build_graph() -> CompiledStateGraph:
-    """
-    Construct the LangGraph state machine for RAG workflow.
-
-    Flow: START -> retrieve_node -> generate_node -> END
-
-    Returns:
-        Compiled LangGraph workflow
-
-    Example:
-        >>> graph = build_graph()
-        >>> result = graph.invoke({"messages": [], "context": "", "question": "test"})
-        >>> "messages" in result
-        True
-    """
+    """Build the RAG workflow: retrieve -> generate -> done."""
     workflow = StateGraph(GraphState)
 
-    # Add nodes
     workflow.add_node("retrieve", retrieve_node)
     workflow.add_node("generate", generate_node)
 
-    # Define edges (flow)
     workflow.set_entry_point("retrieve")
     workflow.add_edge("retrieve", "generate")
     workflow.add_edge("generate", END)
@@ -129,69 +56,42 @@ def build_graph() -> CompiledStateGraph:
     return workflow.compile()
 
 
-# Compile the graph once at module level (cold start optimization)
+# Cached graph instance
 _graph = None
 
 
 def get_graph() -> CompiledStateGraph:
-    """
-    Get or create the compiled LangGraph workflow.
-
-    Implements cold start optimization by caching the compiled graph.
-
-    Returns:
-        Compiled LangGraph workflow
-    """
+    """Get compiled graph (cached for Lambda cold start)."""
     global _graph
 
     if _graph is None:
-        logger.info("Building LangGraph workflow...")
+        logger.info("Building graph...")
         _graph = build_graph()
-        logger.info("LangGraph workflow ready")
+        logger.info("Graph ready")
 
     return _graph
 
 
 def run_rag_pipeline(question: str) -> str:
     """
-    Run the complete RAG pipeline for a user question.
+    Main entry point. Takes a question, returns an answer.
 
-    This is the main entry point for the RAG system. It handles:
-    1. Retrieving relevant context from the knowledge base
-    2. Generating a response using the LLM
-
-    Args:
-        question: User's question
-
-    Returns:
-        Generated answer text
-
-    Raises:
-        ValueError: If question is empty
-        Exception: If pipeline fails
-
-    Example:
-        >>> answer = run_rag_pipeline("What is your main expertise?")
-        >>> isinstance(answer, str)
-        True
+    Retrieves relevant context from knowledge base, then generates response.
     """
     if not question:
         raise ValueError("Question cannot be empty")
 
-    # Initialize state
     initial_state: GraphState = {
         "messages": [],
         "context": "",
         "question": question
     }
 
-    # Run the graph
     graph = get_graph()
     result = graph.invoke(initial_state)
 
-    # Extract AI response
     ai_messages = result.get("messages", [])
     if not ai_messages:
-        raise Exception("No response generated from pipeline")
+        raise Exception("No response generated")
 
     return ai_messages[-1].content

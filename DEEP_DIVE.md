@@ -1,0 +1,272 @@
+# Virtual Me - Technical Deep Dive
+
+## 1. Request Lifecycle
+
+### Step 1: Frontend to API Gateway
+Browser sends `POST /chat` to API Gateway.
+Preflight `OPTIONS` request is handled by `lambda_function.py`, which explicitly returns 200 OK.
+**Reason**: Browsers block cross-origin requests (`chat.lemaire.tel` -> `api.lemaire.tel`) unless origin is explicitly allowed = CORS
+
+### Step 2: Lambda Handler (`lambda_function.py`)
+Lambda processes the JSON event:
+1. **Validation**: Pydantic model (`ChatRequest`) ensures schema validity. Malformed requests fail early.
+2. **Truncation**: Only the last 20 messages are retained (`messages[-20:]`). The goal is to limits token usage and costs. Older context is irrelevant for immediate queries.
+3. **Execution**: Invokes `run_rag_pipeline(question)`.
+
+### Step 3: RAG Pipeline (`rag/pipeline.py`)
+Implements a **LangGraph** state machine with two nodes:
+1. `retrieve`: Fetches documents.
+2. `generate`: Queries LLM.
+
+**State Structure**: `{"question": "...", "context": "...", "messages": [...]}`
+- **Retrieve Node**: Calls `DynamoDBRetriever`, fetches chunks, flattens to context string.
+- **Generate Node**: Injects context into System Prompt, calls Bedrock.
+
+---
+
+## 2. Architecture & Lifecycle: Cold vs Warm Start
+
+### Cold Start (~4 seconds)
+Occurs when no active container exists (after ~15 mins inactivity).
+1. **Python Imports**: `import langchain` (~1.5s).
+2. **Module Level Initialization**:
+   ```python
+   # src/rag/dynamodb_retriever.py
+   _vector_store = None  # Storage for global singleton
+   ```
+3. **Handler Execution**:
+   - Calls `get_retriever()`.
+   - Detects `_vector_store is None`.
+   - **Initialization**: Establishes DynamoDB connection (SSL handshake ~0.5s), compiles graph (~0.5s).
+   - **Total Latency**: ~4s (Source: AWS CloudWatch Logs `Report` lines showing `Init Duration`).
+
+### Warm Start (<400ms)
+Occurs on subsequent requests to the same container.
+1. **Container State**: Memory preserved.
+2. **No Imports**: Modules already loaded.
+3. **Persisted Globals**: `_vector_store` already initialized.
+   ```python
+   def get_retriever():
+       global _vector_store
+       if _vector_store:
+           return _vector_store  # Immediate return
+   ```
+4. **Execution**: Direct `graph.invoke()`.
+   - Runtime limited to API I/O: ~20ms DynamoDB scan + ~300ms Bedrock generation.
+   - **Source**: AWS X-Ray traces showing distinct subsegments for `DynamoDB` and `Bedrock`.
+
+**Optimization**: Module-level global variables reuse connections across invocations.
+
+---
+
+## 3. Technical Key Points
+
+### DynamoDB and GSI
+Vector search requires comparing the query against **every single document** to determine semantic proximity.
+- **Global Secondary Index (GSI)**: A sorted index. Cannot allow sorting by unrestricted semantic similarity.
+- **Implementation**: **Full Table Scan**.
+- **Process**: Loads all 50 chunks into memory (~10ms) and computes cosine similarity in Python.
+- **Scalability**: Effective up to ~1000 chunks.
+    *   **Source**: Latency budget math. 1000 chunks × 4KB = 4MB data. DynamoDB scans 1MB per request. = 4 round-trips to AWS storage (~60ms) + Python cosine calculation loop (~40ms) = ~100ms overhead. Beyond this, latency impacts user experience.
+    *   **Alternative**: For >1000 chunks, use **[Approximate Nearest Neighbor (ANN)](https://en.wikipedia.org/wiki/Nearest_neighbor_search#Approximate_nearest_neighbor)** algorithms via tools like **AWS OpenSearch Service**, **ChromaDB**, or **PostgreSQL with pgvector**.
+        *   **Why O(N)?**: Our current Full Scan compares the query against *every single document* (N). If data doubles, latency doubles.
+        *   **How ANN fixes it**: Instead of checking everyone, ANN uses graph-based indexes to navigate only to "likely" neighbors, reducing search from 100% of rows to a slight fraction **O(log n)**.
+
+
+### Binary Embedding Optimization
+Embeddings are typically lists of **1024 floats** (the default for Titan V2).
+```json
+[0.123456789, 0.23456789, ...] // JSON representation ≈ 12KB per row
+```
+**Optimization**: Packed into binary using `struct.pack`.
+- Standard float is 4 bytes. 1024 * 4 = **4KB**.
+- **Result**: 3x reduction in storage size and read throughput costs.
+- **Impact**: Negligible for current scale (50 rows), but significant for large-scale implementations (e.g., 1M rows saves ~8GB).
+
+### Two HumanMessages Pattern
+Certain models (e.g., Llama via specific adapters) fail when receiving a `SystemMessage` or strict role structures.
+**Workaround implemented**:
+1. `HumanMessage`: "System Prompt: You are a helpful assistant..."
+2. `HumanMessage`: "Question: ..."
+
+The LLM processes the sequence as text completion. Ensures compatibility across Bedrock/OpenAI models without capability flags.
+
+### LangGraph vs LangChain: The Transparency Shift
+
+**LangChain (The "Magic" Way)**
+Uses overridden operators (`|`) to hide logic. Difficult to debug due to implicit state passing.
+```python
+# Hidden state flow, opaque execution
+chain = retriever | prompt | llm | parser
+result = chain.invoke("question")
+```
+
+**LangGraph (Implemented Approach)**
+Utilizes standard Python functions and explicit state definitions.
+```python
+# Clearly defined state schema
+class GraphState(TypedDict):
+    question: str
+    context: str
+    messages: List[BaseMessage]
+
+# Pure function nodes
+def retrieve(state):
+    # Logic is visible and debuggable
+    docs = retriever.get_relevant_documents(state["question"])
+    return {"context": format_docs(docs)}
+
+def generate(state):
+    # Explicit data dependency
+    response = llm.invoke(prompt.format(context=state["context"]))
+    return {"messages": [response]}
+
+# Explicit control flow
+workflow.add_edge("retrieve", "generate")
+```
+**Advantage**: Provides full visibility into data transformations at every step, enabling easier debugging and customization.
+
+### Bedrock Configuration
+**Amazon Bedrock** is a fully managed service offering multiple foundation models (FMs) via a single API.
+*   **Benefit**: Eliminates infrastructure management (no GPUs to provision) and allows hot-swapping models (e.g., Nova to Claude) purely via configuration.
+
+- **Model**: `nova-2-lite` (optimized for cost/speed).
+- **Temperature**: `0.1` (deterministic, fact-based output).
+- **Throttling**: Automatically handled by `boto3`. We just set `mode='adaptive'` and the SDK manages backoff for us (see *Production Engineering*).
+
+---
+
+## 4. Production Engineering
+
+### L1 Cold Start Optimization (Execution Environment)
+Strictly speaking, "Cold Start" (full process initialization) only occurs when AWS creates a **new Execution Environment**. This happens on the first request or after ~15 minutes of inactivity.
+AWS uses **Firecracker** (a micro-VM technology) to create these isolated environments. While often called "containers" as a shorthand, they are technically lightweight VMs.
+Once created, the environment is frozen and reused. We exploit this by using global variables to persist state.
+
+**Implementation**:
+```python
+# src/rag/dynamodb_retriever.py
+_vector_store = None
+
+# Called on EVERY request
+def get_vector_store():
+    global _vector_store
+    # The check below finds the variable is NOT None on warm starts
+    if _vector_store is None:
+        # EXPENSIVE: Runs only when a new environment is created (~4s)
+        # Includes: SSL handshake, DynamoDB connection, graph compilation
+        _vector_store = DynamoDBVectorStore(...)
+    return _vector_store
+```
+
+### Context Sliding Window
+We avoid "Unbounded History" which leads to **Token Explosion**.
+*The Problem*: If we send 100 messages of history, the 101st request pays for processing all 100 previous turns. Costs grow linearly, and we unnecessarily fill the context window.
+
+**Implementation**:
+```python
+# src/lambda_function.py
+class ChatRequest(BaseModel):
+    messages: List[Message]
+    # Pydantic validation ensures structure before we even touch logic
+
+def lambda_handler(event, context):
+    # ... validation ...
+    
+    # SLIDING WINDOW: Strict Cap
+    if len(messages) > CONVERSATION_TRUNCATE_LIMIT:
+        messages = messages[-CONVERSATION_TRUNCATE_LIMIT:]
+    
+    # Deterministic cost ceiling.
+    # Max cost per turn = (20 msgs * avg_tokens) + new_query
+```
+
+### RAG Hyperparameters
+These are not random; they are tuned for "Resume QA".
+
+#### Top K = 3 (The "Goldilocks" Zone)
+*   **Why not 1? (Misses Context)**: Markdown splitting often separates headers from content.
+    *   *Scenario*: Chunk 1 has `## Experience`. Chunk 2 has `### Company A`.
+    *   If we only retrieve Chunk 2, the LLM doesn't know it's "Experience". Retrieving 3 ensures we likely capture the surrounding semantic hierarchy.
+*   **Why not 10? (Dilutes Signal)**:
+    *   *Signal-to-Noise Ratio*: If only 1 chunk has the answer, adding 9 irrelevant chunks forces the LLM to process more tokens, increasing the chance it focuses on the wrong details ("finding a needle in a larger haystack").
+    *   *Lost in the Middle*: LLMs are known to ignore information buried in the middle of a large context block.
+    *   *Cost*: 10 chunks = 3x more input tokens than 3.
+
+#### Temperature = 0.1
+*   **Goal**: Determinism.
+*   **Logic**: We want the LLM to act as a **Retrieval Engine**, not a Creative Writer.
+    *   `0.1`: "According to the text, Jeremy worked at AWS." (Fact)
+    *   `0.9`: "Jeremy, a cloud wizard, soared through the AWS skies..." (Hallucination risk)
+
+### AWS Adaptive Retries
+Standard retries (fixed interval) often worsen specific AWS throttling scenarios (Thundering Herd problem).
+Implemented `mode='adaptive'` provided by `botocore` to dynamically adjust backoff based on the endpoint's current load.
+
+**Implementation**:
+```python
+# src/rag/generator.py
+from botocore.config import Config
+
+BEDROCK_RETRY_CONFIG = Config(
+    retries={
+        'max_attempts': 3,
+        'mode': 'adaptive'  # Dynamic backoff for throttling (HTTP 429)
+    }
+)
+```
+
+---
+
+## 5. Resource Utilization
+
+### Lambda Memory Breakdown (512MB)
+The function is configured with **512MB of RAM**. This is a deliberate choice based on actual utilization:
+
+- **Python Runtime + Boto3**: ~120MB
+- **LangChain + Dependencies**: ~180MB
+- **Graph Compilation & Working State**: ~50MB
+- **Total Overhead**: ~350MB
+- **Safety Margin**: ~160MB (needed for embedding processing and JSON overhead).
+
+Using less than 512MB often leads to `Memory Limit Exceeded` during the heavy initialization of LangChain and Bedrock clients.
+
+---
+
+## 6. Data Storage Strategy
+
+### DynamoDB Schema (What we store)
+We store the **Original Text** alongside the **Vector**. There is no "reverse engineering" of vectors back to text; we simply retrieve the text field that sits next to the winning vector.
+
+**Item Structure**:
+```json
+{
+  "id": "doc_0_abc123",              # Unique ID
+  "text": "I have 8 years...",       # <--- The Payload (Retrieved & sent to LLM)
+  "embedding": <Binary Blob>,        # <--- The Search Key (Used for math)
+  "metadata": "{\"source\": \"...\"}"
+}
+```
+
+### DynamoDB vs Dedicated Vector DB
+Why does this architecture differ from using specialized tools like Chroma?
+
+| Feature | DynamoDB (Our Approach) | Vector DB (e.g. Chroma) |
+| :--- | :--- | :--- |
+| **Storage** | Text + Vector in same row | Text + Vector in same row (Text stored as metadata) |
+| **Search Logic** | **Client-Side (Python)**. We fetch EVERYTHING and loop through it to calculate cosine similarity. | **Server-Side**. The DB engine finds the nearest neighbors and returns the **Text** (we ignore the returned vector). |
+| **Scalability** | **O(N)**. Slower as data grows. | **O(log n)**. Instant even with millions of rows. |
+| **Cost** | High read cost (pay to read every row). | Optimized for search. |
+
+**Why we chose DynamoDB**: It acts as a **'Serverless Poor Man's Vector DB'**. For <1000 items, brute-force scanning is practically free and requires zero maintenance, avoiding the complexity and cost of running a dedicated ElasticSearch/OpenSearch cluster (often $hundreds/month).
+
+---
+
+## 6. Summary
+**Serverless RAG Architecture**
+- **Compute**: Lambda (pay-per-request).
+- **Storage**: DynamoDB (pay-per-request).
+- **Inference**: Bedrock (pay-per-token).
+- **Idle Cost**: $0.
+
+Optimizes for low maintenance and zero baseline cost, eliminating the need for always-on container orchestration.
