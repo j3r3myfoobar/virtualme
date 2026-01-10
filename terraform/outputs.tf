@@ -15,15 +15,15 @@ output "deployment_summary" {
     }
     api = {
       # Use custom domain if enabled
-      endpoint   = var.enable_custom_domain ? "https://${var.api_subdomain}.${var.domain_name}/chat" : "${aws_apigatewayv2_stage.prod.invoke_url}/chat"
-      api_id     = aws_apigatewayv2_api.virtual_me_api.id
-      stage_name = aws_apigatewayv2_stage.prod.name
+      endpoint      = var.enable_custom_domain ? "https://${var.api_subdomain}.${var.domain_name}/chat" : "${aws_apigatewayv2_stage.prod.invoke_url}/chat"
+      api_id        = aws_apigatewayv2_api.virtual_me_api.id
+      stage_name    = aws_apigatewayv2_stage.prod.name
       custom_domain = var.enable_custom_domain ? "https://${var.api_subdomain}.${var.domain_name}" : "Not configured"
-      default_url = aws_apigatewayv2_stage.prod.invoke_url
+      default_url   = aws_apigatewayv2_stage.prod.invoke_url
     }
     frontend = {
       cloudfront_url = "https://${aws_cloudfront_distribution.frontend.domain_name}"
-      custom_domain  = "https://chat.lemaire.tel"
+      custom_domain  = local.frontend_url
       bucket_name    = aws_s3_bucket.frontend.id
       note           = "Accessible via CloudFront only (S3 direct access blocked)"
     }
@@ -38,8 +38,8 @@ output "quick_links" {
   description = "Quick access links"
   value = {
     # Frontend URLs
-    chatbot_url        = "https://chat.lemaire.tel"
-    cloudfront_url     = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+    chatbot_url    = local.frontend_url
+    cloudfront_url = "https://${aws_cloudfront_distribution.frontend.domain_name}"
 
     # API URL (custom domain if enabled)
     api_url = var.enable_custom_domain ? "https://${var.api_subdomain}.${var.domain_name}/chat" : "${aws_apigatewayv2_stage.prod.invoke_url}/chat"
@@ -56,7 +56,7 @@ output "quick_links" {
 # Individual outputs for easy access
 output "frontend_url" {
   description = "Frontend website URL (via CloudFront)"
-  value       = "https://chat.lemaire.tel"
+  value       = local.frontend_url
 }
 
 output "api_endpoint" {
@@ -70,7 +70,7 @@ output "custom_domain_info" {
     api_domain = "https://${var.api_subdomain}.${var.domain_name}"
     status     = "Configured"
     note       = "API is accessible via custom domain"
-  } : {
+    } : {
     status = "Not configured"
     note   = "Using default API Gateway URL"
   }

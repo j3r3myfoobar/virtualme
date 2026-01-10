@@ -165,6 +165,23 @@ def get_settings() -> Settings:
     return _settings
 
 
+def _resolve_model_id(alias: str, model_map: Dict[str, str], is_bedrock: bool) -> str:
+    """
+    Resolve model alias to full model ID.
+
+    Args:
+        alias: Model alias or direct model ID
+        model_map: Mapping of aliases to model IDs
+        is_bedrock: Whether this is a Bedrock backend
+
+    Returns:
+        Resolved model ID
+    """
+    if is_bedrock:
+        return model_map.get(alias, alias)
+    return alias
+
+
 def get_model_config() -> ModelConfig:
     """
     Get model configuration from environment variables.
@@ -173,12 +190,11 @@ def get_model_config() -> ModelConfig:
         ModelConfig instance with validated settings
     """
     settings = get_settings()
-
-    # Resolve model ID based on backend
-    if settings.llm_backend == "bedrock":
-        model_id = BEDROCK_MODELS.get(settings.llm_model, settings.llm_model)
-    else:
-        model_id = settings.llm_model
+    model_id = _resolve_model_id(
+        settings.llm_model,
+        BEDROCK_MODELS,
+        settings.llm_backend == "bedrock"
+    )
 
     return ModelConfig(
         backend=settings.llm_backend,
@@ -197,11 +213,11 @@ def get_embedding_config() -> Dict[str, str]:
         Dict with backend, model_id, and aws_region
     """
     settings = get_settings()
-
-    if settings.embedding_backend == "bedrock":
-        model_id = BEDROCK_EMBEDDING_MODELS.get(settings.embedding_model, settings.embedding_model)
-    else:
-        model_id = settings.embedding_model
+    model_id = _resolve_model_id(
+        settings.embedding_model,
+        BEDROCK_EMBEDDING_MODELS,
+        settings.embedding_backend == "bedrock"
+    )
 
     return {
         "backend": settings.embedding_backend,

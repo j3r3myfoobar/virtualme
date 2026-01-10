@@ -7,24 +7,14 @@ import os
 from typing import Optional, List
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from botocore.config import Config
 
 from config import get_embedding_config
+from constants import RAG_TOP_K_CHUNKS, DEFAULT_AWS_REGION, BEDROCK_RETRY_CONFIG
 from utils.logging import get_logger
-
-logger = get_logger(__name__)
-
 from vectorstores.dynamodb_vector_store import DynamoDBVectorStore
 from loaders.knowledge_base import load_knowledge_base
-from constants import RAG_TOP_K_CHUNKS, DEFAULT_AWS_REGION
 
-# Retry configuration for Bedrock Embeddings API calls
-BEDROCK_RETRY_CONFIG = Config(
-    retries={
-        'max_attempts': 3,
-        'mode': 'adaptive'
-    }
-)
+logger = get_logger(__name__)
 
 # Global retriever cache (cold start optimization)
 _vector_store: Optional[DynamoDBVectorStore] = None
@@ -93,6 +83,28 @@ def _get_embeddings() -> Embeddings:
         raise ValueError(f"Unsupported embedding backend: {backend}")
 
 
+def _populate_vector_store(vector_store: DynamoDBVectorStore) -> None:
+    """
+    Populate an empty vector store with knowledge base documents.
+
+    Args:
+        vector_store: Empty DynamoDB vector store to populate
+    """
+    documents = load_knowledge_base()
+    logger.info("Loaded %d documents from knowledge base", len(documents))
+
+    embeddings = _get_embeddings()
+    texts = [doc.page_content for doc in documents]
+    metadatas = [doc.metadata for doc in documents]
+
+    logger.info("Generating embeddings...")
+    embedding_vectors = embeddings.embed_documents(texts)
+
+    logger.info("Storing vectors in DynamoDB...")
+    vector_store.add_documents(texts, embedding_vectors, metadatas)
+    logger.info("Initialized DynamoDB with %d vectors", len(texts))
+
+
 def _initialize_vector_store() -> DynamoDBVectorStore:
     """
     Initialize DynamoDB vector store and load knowledge base if empty.
@@ -105,29 +117,9 @@ def _initialize_vector_store() -> DynamoDBVectorStore:
 
     vector_store = DynamoDBVectorStore(table_name=table_name, region=region)
 
-    # Check if vector store is empty (needs initialization)
     if vector_store.count() == 0:
         logger.info("DynamoDB vector store is empty, initializing...")
-
-        # Load knowledge base documents
-        documents = load_knowledge_base()
-        logger.info("Loaded %d documents from knowledge base", len(documents))
-
-        # Get embeddings
-        embeddings = _get_embeddings()
-
-        # Generate embeddings for all documents
-        logger.info("Generating embeddings...")
-        texts = [doc.page_content for doc in documents]
-        metadatas = [doc.metadata for doc in documents]
-
-        # Batch embed all texts
-        embedding_vectors = embeddings.embed_documents(texts)
-
-        # Store in DynamoDB
-        logger.info("Storing vectors in DynamoDB...")
-        vector_store.add_documents(texts, embedding_vectors, metadatas)
-        logger.info("Initialized DynamoDB with %d vectors", len(texts))
+        _populate_vector_store(vector_store)
     else:
         logger.info("DynamoDB vector store already initialized (%d vectors)", vector_store.count())
 

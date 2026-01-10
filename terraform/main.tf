@@ -22,11 +22,7 @@ provider "aws" {
   region = var.aws_region
 
   default_tags {
-    tags = {
-      Project     = "VirtualMe"
-      Environment = var.environment
-      ManagedBy   = "Terraform"
-    }
+    tags = local.common_tags
   }
 }
 
@@ -36,11 +32,7 @@ provider "aws" {
   region = "us-east-1"
 
   default_tags {
-    tags = {
-      Project     = "VirtualMe"
-      Environment = var.environment
-      ManagedBy   = "Terraform"
-    }
+    tags = local.common_tags
   }
 }
 
@@ -50,9 +42,9 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
-# Route53 Zone for lemaire.tel domain
+# Route53 Zone for domain
 data "aws_route53_zone" "main" {
-  name         = "lemaire.tel"
+  name         = var.domain_name
   private_zone = false
 }
 
@@ -61,10 +53,23 @@ data "aws_route53_zone" "main" {
 ###############################################################################
 
 locals {
+  # Resource naming
   function_name = "${var.project_name}-${var.environment}"
   api_name      = "${var.project_name}-api-${var.environment}"
   s3_bucket     = "${var.project_name}-frontend-${var.environment}-${data.aws_caller_identity.current.account_id}"
-  api_endpoint  = "https://api.lemaire.tel/chat"  # Hardcoded - we control this domain
+
+  # Domain configuration (computed from variables)
+  frontend_fqdn = "${var.frontend_subdomain}.${var.domain_name}"
+  api_fqdn      = "${var.api_subdomain}.${var.domain_name}"
+  frontend_url  = "https://${local.frontend_fqdn}"
+  api_endpoint  = "https://${local.api_fqdn}/chat"
+
+  # Common tags for providers
+  common_tags = {
+    Project     = "VirtualMe"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 ###############################################################################
@@ -74,8 +79,8 @@ locals {
 # Create deployment package with dependencies
 resource "null_resource" "lambda_dependencies" {
   triggers = {
-    requirements = filemd5("${path.module}/../requirements.txt")
-    lambda_code  = filemd5("${path.module}/../src/lambda_function.py")
+    requirements   = filemd5("${path.module}/../requirements.txt")
+    lambda_code    = filemd5("${path.module}/../src/lambda_function.py")
     knowledge_base = filemd5("${path.module}/../src/knowledge_base/resume.md")
   }
 
@@ -221,12 +226,12 @@ resource "aws_lambda_function" "virtual_me" {
   s3_bucket        = aws_s3_bucket.lambda_deployments.id
   s3_key           = aws_s3_object.lambda_package.key
   function_name    = local.function_name
-  role            = aws_iam_role.lambda_role.arn
-  handler         = "lambda_function.lambda_handler"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "lambda_function.lambda_handler"
   source_code_hash = data.archive_file.lambda_package.output_base64sha256
-  runtime         = "python3.11"
-  timeout         = 30
-  memory_size     = 512
+  runtime          = "python3.11"
+  timeout          = 30
+  memory_size      = 512
 
   # Enable X-Ray tracing for debugging and performance monitoring
   tracing_config {
@@ -236,22 +241,18 @@ resource "aws_lambda_function" "virtual_me" {
   environment {
     variables = {
       # LLM Configuration
-      LLM_BACKEND         = "bedrock"
-      LLM_MODEL          = var.llm_model
-      LLM_TEMPERATURE    = var.llm_temperature
+      LLM_BACKEND     = "bedrock"
+      LLM_MODEL       = var.llm_model
+      LLM_TEMPERATURE = var.llm_temperature
 
       # Embedding Configuration
-      EMBEDDING_BACKEND  = "bedrock"
-      EMBEDDING_MODEL    = var.embedding_model
+      EMBEDDING_BACKEND = "bedrock"
+      EMBEDDING_MODEL   = var.embedding_model
 
       # DynamoDB Configuration (for vector storage)
-      DYNAMODB_TABLE     = aws_dynamodb_table.vectors.name
+      DYNAMODB_TABLE = aws_dynamodb_table.vectors.name
 
-      # Note: AWS_REGION is automatically set by Lambda runtime
-      # AWS_DEFAULT_REGION is also set automatically
-
-      # Legacy OpenAI support (optional)
-      # OPENAI_API_KEY   = var.openai_api_key
+      # Note: AWS_REGION and AWS_DEFAULT_REGION are automatically set by Lambda runtime
     }
   }
 
@@ -277,7 +278,7 @@ resource "aws_apigatewayv2_api" "virtual_me_api" {
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_origins = ["https://chat.lemaire.tel"]
+    allow_origins = [local.frontend_url]
     allow_methods = ["POST", "OPTIONS"]
     allow_headers = ["content-type"]
     max_age       = 300
@@ -308,8 +309,8 @@ resource "aws_apigatewayv2_stage" "prod" {
 
   # Throttling configuration
   default_route_settings {
-    throttling_burst_limit = 100  # Maximum concurrent requests
-    throttling_rate_limit  = 50   # Requests per second
+    throttling_burst_limit = 100 # Maximum concurrent requests
+    throttling_rate_limit  = 50  # Requests per second
   }
 
   access_log_settings {
@@ -388,25 +389,9 @@ resource "aws_s3_object" "index_html" {
   key          = "index.html"
   content_type = "text/html"
 
-  # Replace ALL 5 API endpoint placeholders in HTML
+  # Replace API endpoint placeholder (handles all occurrences)
   content = replace(
-    replace(
-      replace(
-        replace(
-          replace(
-            file("${path.module}/../frontend/index.html"),
-            "API_ENDPOINT_PLACEHOLDER",
-            local.api_endpoint
-          ),
-          "API_ENDPOINT_PLACEHOLDER",
-          local.api_endpoint
-        ),
-        "API_ENDPOINT_PLACEHOLDER",
-        local.api_endpoint
-      ),
-      "API_ENDPOINT_PLACEHOLDER",
-      local.api_endpoint
-    ),
+    file("${path.module}/../frontend/index.html"),
     "API_ENDPOINT_PLACEHOLDER",
     local.api_endpoint
   )

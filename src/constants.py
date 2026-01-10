@@ -5,6 +5,7 @@ Centralizes all hardcoded values for easier maintenance and configuration.
 """
 
 from pathlib import Path
+from botocore.config import Config
 
 # ==============================================================================
 # Paths
@@ -111,3 +112,23 @@ CONTENT_TYPE = "application/json"
 
 # Enable debug logging
 DEBUG_MODE = False
+
+# ==============================================================================
+# AWS Retry Configuration
+# ==============================================================================
+
+# Retry configuration for Bedrock API calls (LLM and Embeddings)
+BEDROCK_RETRY_CONFIG = Config(
+    retries={
+        'max_attempts': 3,
+        'mode': 'adaptive'
+    }
+)
+
+# Retry configuration for DynamoDB operations
+DYNAMODB_RETRY_CONFIG = Config(
+    retries={
+        'max_attempts': 3,
+        'mode': 'adaptive'
+    }
+)

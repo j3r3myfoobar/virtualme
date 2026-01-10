@@ -3,10 +3,10 @@
 # Enables HTTPS and custom domain support
 ###############################################################################
 
-# ACM Certificate for chat.lemaire.tel (must be in us-east-1 for CloudFront)
+# ACM Certificate for frontend (must be in us-east-1 for CloudFront)
 resource "aws_acm_certificate" "frontend" {
   provider          = aws.us_east_1
-  domain_name       = "chat.lemaire.tel"
+  domain_name       = local.frontend_fqdn
   validation_method = "DNS"
 
   lifecycle {
@@ -14,7 +14,7 @@ resource "aws_acm_certificate" "frontend" {
   }
 
   tags = {
-    Name = "chat.lemaire.tel"
+    Name = local.frontend_fqdn
   }
 }
 
@@ -53,7 +53,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"
-  aliases             = ["chat.lemaire.tel"]
+  aliases             = [local.frontend_fqdn]
   price_class         = "PriceClass_100" # Use only North America and Europe
 
   origin {
@@ -109,10 +109,10 @@ resource "aws_cloudfront_distribution" "frontend" {
   depends_on = [aws_acm_certificate_validation.frontend]
 }
 
-# Route53 record for chat.lemaire.tel pointing to CloudFront
+# Route53 record for frontend pointing to CloudFront
 resource "aws_route53_record" "frontend" {
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = "chat.lemaire.tel"
+  name    = local.frontend_fqdn
   type    = "A"
 
   alias {
@@ -135,5 +135,5 @@ output "cloudfront_domain_name" {
 
 output "frontend_custom_domain" {
   description = "Custom domain for frontend"
-  value       = "https://chat.lemaire.tel"
+  value       = local.frontend_url
 }

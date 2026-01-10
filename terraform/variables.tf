@@ -5,7 +5,7 @@
 variable "aws_region" {
   description = "AWS region to deploy resources"
   type        = string
-  default     = "eu-west-3"  # Paris region
+  default     = "eu-west-3" # Paris region
 }
 
 variable "environment" {
@@ -84,13 +84,13 @@ variable "api_subdomain" {
 variable "acm_certificate_arn" {
   description = "ARN of ACM certificate for *.lemaire.tel (must be in us-east-1 for CloudFront)"
   type        = string
-  default     = ""  # You'll provide this in terraform.tfvars
+  default     = "" # You'll provide this in terraform.tfvars
 }
 
 variable "route53_zone_id" {
   description = "Route53 hosted zone ID for lemaire.tel"
   type        = string
-  default     = ""  # You'll provide this in terraform.tfvars
+  default     = "" # You'll provide this in terraform.tfvars
 }
 
 variable "enable_custom_domain" {
@@ -99,13 +99,3 @@ variable "enable_custom_domain" {
   default     = true
 }
 
-###############################################################################
-# Deprecated Variables (kept for backward compatibility)
-###############################################################################
-
-variable "openai_api_key" {
-  description = "DEPRECATED: OpenAI API key (not used in production with Bedrock)"
-  type        = string
-  sensitive   = true
-  default     = ""
-}

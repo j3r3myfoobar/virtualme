@@ -13,6 +13,7 @@ from constants import (
     MAX_CONVERSATION_LENGTH,
     CONVERSATION_WARNING_THRESHOLD
 )
+from utils.validation import validate_not_empty_whitespace, validate_no_null_bytes
 
 
 class Message(BaseModel):
@@ -41,20 +42,10 @@ class Message(BaseModel):
 
     @field_validator('text')
     @classmethod
-    def validate_text_not_empty(cls, v: str) -> str:
-        """Validate text is not just whitespace."""
-        stripped = v.strip()
-        if not stripped:
-            raise ValueError("Message text cannot be empty or whitespace only")
-        return stripped
-
-    @field_validator('text')
-    @classmethod
-    def validate_no_null_bytes(cls, v: str) -> str:
-        """Prevent null byte injection."""
-        if '\x00' in v:
-            raise ValueError("Message text cannot contain null bytes")
-        return v
+    def validate_text(cls, v: str) -> str:
+        """Validate text is not empty and has no null bytes."""
+        v = validate_not_empty_whitespace(v)
+        return validate_no_null_bytes(v)
 
     class Config:
         # Pydantic v2 configuration
@@ -145,11 +136,9 @@ class ChatResponse(BaseModel):
 
     @field_validator('text')
     @classmethod
-    def validate_text_not_empty(cls, v: str) -> str:
+    def validate_text(cls, v: str) -> str:
         """Validate response is not empty."""
-        if not v.strip():
-            raise ValueError("Response text cannot be empty")
-        return v
+        return validate_not_empty_whitespace(v, strip=False)
 
     class Config:
         json_schema_extra = {

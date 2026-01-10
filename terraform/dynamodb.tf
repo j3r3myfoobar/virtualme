@@ -5,7 +5,7 @@
 
 resource "aws_dynamodb_table" "vectors" {
   name         = "${local.function_name}-vectors"
-  billing_mode = "PAY_PER_REQUEST"  # Serverless pricing
+  billing_mode = "PAY_PER_REQUEST" # Serverless pricing
 
   hash_key = "id"
 
@@ -20,9 +20,9 @@ resource "aws_dynamodb_table" "vectors" {
   }
 
   tags = {
-    Name        = "Virtual Me Vector Storage"
-    Purpose     = "Stores document embeddings for RAG"
-    CostCenter  = "AI/ML"
+    Name       = "Virtual Me Vector Storage"
+    Purpose    = "Stores document embeddings for RAG"
+    CostCenter = "AI/ML"
   }
 }
 

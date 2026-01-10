@@ -3,27 +3,16 @@ DynamoDB Vector Store for RAG
 Stores document embeddings in DynamoDB and performs similarity search
 """
 
-import os
 import json
 import struct
 import hashlib
 from typing import List, Tuple, Optional
 import boto3
-from boto3.dynamodb.conditions import Attr
-from botocore.config import Config
 
-from constants import DEFAULT_AWS_REGION
+from constants import DEFAULT_AWS_REGION, DYNAMODB_RETRY_CONFIG
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-# Retry configuration for DynamoDB operations
-RETRY_CONFIG = Config(
-    retries={
-        'max_attempts': 3,
-        'mode': 'adaptive'
-    }
-)
 
 
 class DynamoDBVectorStore:
@@ -42,7 +31,7 @@ class DynamoDBVectorStore:
         """
         self.table_name = table_name
         self.region = region
-        self.dynamodb = boto3.resource('dynamodb', region_name=region, config=RETRY_CONFIG)
+        self.dynamodb = boto3.resource('dynamodb', region_name=region, config=DYNAMODB_RETRY_CONFIG)
         self.table = self.dynamodb.Table(table_name)
 
     @staticmethod
