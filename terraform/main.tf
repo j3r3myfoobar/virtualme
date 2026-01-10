@@ -330,3 +330,11 @@ resource "aws_s3_object" "index_html" {
 
   etag = filemd5("${path.module}/../frontend/index.html")
 }
+
+resource "aws_s3_object" "deepchat_js" {
+  bucket       = aws_s3_bucket.frontend.id
+  key          = "deepChat.bundle.js"
+  source       = "${path.module}/../frontend/deepChat.bundle.js"
+  content_type = "application/javascript"
+  etag         = filemd5("${path.module}/../frontend/deepChat.bundle.js")
+}
