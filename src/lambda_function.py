@@ -10,7 +10,11 @@ from pydantic import ValidationError
 
 from rag.pipeline import run_rag_pipeline
 from utils.http import http_response
+from utils.logging import get_logger
 from models.requests import ChatRequest, ErrorResponse
+from constants import MIN_REMAINING_TIME_MS, CONVERSATION_TRUNCATE_LIMIT
+
+logger = get_logger(__name__)
 
 
 def extract_last_user_message(messages: list) -> str:
@@ -77,15 +81,31 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             )
             return http_response(422, error_response.model_dump())
 
-        # Extract the last user message (already validated by Pydantic)
-        last_user_message = chat_request.messages[-1].text
+        # Truncate conversation to last N messages (silently drop older ones)
+        messages = chat_request.messages
+        if len(messages) > CONVERSATION_TRUNCATE_LIMIT:
+            logger.info("Truncating conversation from %d to %d messages", len(messages), CONVERSATION_TRUNCATE_LIMIT)
+            messages = messages[-CONVERSATION_TRUNCATE_LIMIT:]
 
-        print(f"Processing question: {last_user_message[:100]}...")
+        # Extract the last user message
+        last_user_message = messages[-1].text
+
+        logger.info("Processing question: %s...", last_user_message[:100])
+
+        # Check remaining execution time before starting expensive RAG pipeline
+        if context is not None:
+            remaining_ms = context.get_remaining_time_in_millis()
+            if remaining_ms < MIN_REMAINING_TIME_MS:
+                logger.warning("Insufficient time remaining: %dms < %dms", remaining_ms, MIN_REMAINING_TIME_MS)
+                return http_response(503, {
+                    'error': 'Insufficient time remaining',
+                    'retry': True
+                })
 
         # Run the RAG pipeline
         answer = run_rag_pipeline(last_user_message)
 
-        print(f"Generated answer ({len(answer)} chars)")
+        logger.info("Generated answer (%d chars)", len(answer))
 
         # Format response for Deep Chat
         response_body = {
@@ -95,20 +115,15 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return http_response(200, response_body)
 
     except json.JSONDecodeError as e:
-        print(f"Invalid JSON: {e}")
+        logger.warning("Invalid JSON: %s", e)
         return http_response(400, {'error': 'Invalid JSON in request body'})
 
     except ValueError as e:
-        # Validation errors (empty question, missing API key, etc.)
-        print(f"Validation error: {e}")
+        logger.warning("Validation error: %s", e)
         return http_response(400, {'error': str(e)})
 
-    except Exception as e:
-        # Unexpected errors - log details internally but don't expose to client
-        print(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
-
+    except Exception:
+        logger.exception("Unexpected error in lambda handler")
         return http_response(500, {
             'error': 'Internal server error'
         })

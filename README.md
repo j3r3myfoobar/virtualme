@@ -6,7 +6,7 @@
 ![Terraform](https://img.shields.io/badge/Terraform-IaC-purple)
 ![LocalStack](https://img.shields.io/badge/LocalStack-Local%20Dev-yellow)
 
-A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Generation (RAG)** to answer questions accurately based on your personal data (resume, bio, etc.). Built with AWS Lambda, AWS Bedrock (Mixtral 8x7B), LangChain, LangGraph, and DynamoDB for persistent vector storage. Supports local development with LM Studio.
+A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Generation (RAG)** to answer questions accurately based on your personal data (resume, bio, etc.). Built with AWS Lambda, AWS Bedrock (Nova 2 Lite), LangChain, LangGraph, and DynamoDB for persistent vector storage. Supports local development with LM Studio.
 
 ## 🌟 Features
 
@@ -16,7 +16,8 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
 - **Beautiful UI**: Modern, responsive chat interface using Deep Chat web component
 - **Local Development**: Full LocalStack support for development without AWS costs
 - **Infrastructure as Code**: Complete Terraform configuration for reproducible deployments
-- **Production Ready**: Includes logging, monitoring, and error handling
+- **Production Ready**: Pydantic validation, structured logging, retry logic, and timeout handling
+- **Well Tested**: 37 unit tests covering core functionality
 
 ## 🏗️ Architecture
 
@@ -33,7 +34,7 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
                         │  1. Retrieve Node                   │
                         │     ↓ (DynamoDB Vector Search)      │
                         │  2. Generate Node                   │
-                        │     ↓ (Bedrock: Mixtral 8x7B)      │
+                        │     ↓ (Bedrock: Nova 2 Lite)        │
                         │  3. Response                        │
                         └─────────────────────────────────────┘
 ```
@@ -42,7 +43,7 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
 
 1. **Indexing** (Cold Start): `resume.md` → MarkdownHeaderTextSplitter → Bedrock Titan Embeddings → DynamoDB Vector Store
 2. **Retrieval** (Per Request): User Question → Embedding → DynamoDB Vector Search → Top 3 Relevant Chunks
-3. **Generation**: System Prompt + Context + Question → Bedrock Mixtral 8x7B → Grounded Response
+3. **Generation**: System Prompt + Context + Question → Bedrock Nova 2 Lite → Grounded Response
 
 ## ☁️ AWS Services Used
 
@@ -53,7 +54,7 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
 | **Lambda** | Main compute - runs the chatbot handler | Python 3.11, 512 MB, 30s timeout | 💰 Low (~$0.20/month) |
 | **API Gateway** (HTTP API) | REST API endpoint for chatbot | HTTP API (cheaper than REST API) | 💰 Very Low (~$0.10/month) |
 | **DynamoDB** | Vector storage for document embeddings | On-demand capacity | 💰💰 Medium (~$1-5/month) |
-| **Bedrock** | LLM models (Mixtral 8x7B) | Mixtral 8x7B, temperature 0.1 | 💰💰 Medium (~$1-10/month) |
+| **Bedrock** | LLM models (Nova 2 Lite) | Nova 2 Lite, temperature 0.1 | 💰 Low (~$0.50-2/month) |
 
 ### Frontend & CDN
 
@@ -92,14 +93,14 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
 |----------|----------------------|
 | Lambda + API Gateway | $0.30 - $1.00 |
 | DynamoDB | $1.00 - $5.00 |
-| Bedrock (Mixtral 8x7B) | $1.00 - $10.00 |
+| Bedrock (Nova 2 Lite) | $0.50 - $2.00 |
 | S3 + CloudFront | $0.15 - $0.50 |
 | Route53 | $0.50 |
 | Monitoring | $0.25 - $0.50 |
 | ACM & IAM | $0.00 (Free) |
-| **Total** | **$3 - $18/month** |
+| **Total** | **$2.70 - $9.50/month** |
 
-*For personal use (~100 conversations/month), typically **$5-8/month***
+*For personal use (~100 conversations/month), typically **$3-5/month***
 
 ## 📁 Project Structure
 
@@ -107,6 +108,8 @@ A production-ready "Virtual Clone" chatbot that uses **Retrieval Augmented Gener
 virtualme/
 ├── src/                   # Lambda source code (modular)
 │   ├── lambda_function.py # Entry point (Lambda handler)
+│   ├── config.py         # Pydantic settings and model configuration
+│   ├── constants.py      # Application constants
 │   ├── resume.md         # Knowledge base
 │   ├── rag/              # RAG pipeline modules
 │   │   ├── pipeline.py   # LangGraph orchestration
@@ -115,20 +118,24 @@ virtualme/
 │   │   └── state.py      # State definitions
 │   ├── loaders/          # Document loaders
 │   │   └── knowledge_base.py
+│   ├── models/           # Pydantic request/response models
+│   │   └── requests.py
+│   ├── vectorstores/     # Vector store implementations
+│   │   └── dynamodb_vector_store.py
 │   └── utils/            # Utility functions
-│       └── http.py
+│       ├── http.py       # HTTP response helpers
+│       └── logging.py    # Centralized logging configuration
 ├── frontend/              # Frontend application
 │   └── index.html        # Deep Chat UI
-├── scripts/               # Deployment scripts
-│   ├── localstack-deploy.sh
-│   ├── aws-deploy.sh
-│   └── quickstart.sh
 ├── terraform/             # AWS infrastructure (IaC)
-├── tests/                 # Unit and integration tests
+├── tests/                 # Unit tests (37 tests)
 │   ├── unit/
-│   └── integration/
+│   │   ├── test_generator.py
+│   │   ├── test_vector_store.py
+│   │   ├── test_http.py
+│   │   └── ...
+│   └── conftest.py       # Shared pytest fixtures
 ├── requirements.txt       # Python dependencies
-├── docker-compose.yml     # LocalStack configuration
 └── README.md             # This file
 ```
 
@@ -246,11 +253,13 @@ virtualme/
 To switch between Bedrock models, update your environment variables:
 
 ```bash
-# Use Claude instead of Llama
-LLM_MODEL=claude-3-haiku
+# Available models (see src/config.py for full list)
+LLM_MODEL=nova-2-lite      # Default - best price/performance (re:Invent 2025)
+LLM_MODEL=nova-2-pro       # More capable, higher cost
+LLM_MODEL=claude-3-haiku   # Anthropic alternative
 
 # Use different embedding model
-EMBEDDING_MODEL=cohere-embed-english
+EMBEDDING_MODEL=titan-embed-text-v2  # Default
 ```
 
 For Terraform deployments, update `terraform/terraform.tfvars` and run `terraform apply`.
@@ -327,10 +336,12 @@ Edit `frontend/index.html` to change:
 - Bedrock: ~$0.50/month (LLM + embeddings)
 - **Total: ~$2.15/month**
 
-**Cost Comparison**:
-- **Llama 3.2 3B**: Most cost-effective, good quality
-- **Llama 3.2 8B**: 2x cost, better reasoning
-- **Claude 3 Haiku**: 3x cost, best quality
+**Cost Comparison** (per 1M tokens):
+| Model | Input | Output | Notes |
+|-------|-------|--------|-------|
+| **Nova 2 Lite** | $0.06 | $0.24 | Default - best value |
+| **Nova 2 Pro** | $0.80 | $3.20 | Extended thinking |
+| **Claude 3 Haiku** | $0.25 | $1.25 | Anthropic alternative |
 
 **Cost Optimization Tips**:
 - DynamoDB on-demand pricing perfect for low traffic
@@ -341,13 +352,13 @@ Edit `frontend/index.html` to change:
 
 ### Run Unit Tests
 ```bash
-# All tests
-python tests/test_all.py
+# All tests (37 tests)
+python -m pytest tests/ -v
 
 # Individual test suites
-python tests/unit/test_http.py
-python tests/unit/test_knowledge_base.py
-python tests/unit/test_lambda_handler.py
+python -m pytest tests/unit/test_vector_store.py -v
+python -m pytest tests/unit/test_generator.py -v
+python -m pytest tests/unit/test_http.py -v
 ```
 
 ### Quick Test Script
@@ -566,10 +577,10 @@ MIT License - feel free to use this for personal or commercial projects!
 
 - **LangChain** for the excellent RAG framework
 - **AWS Bedrock** for serverless LLM infrastructure
-- **Meta** for the open Llama 3.2 models
+- **Amazon Nova 2** for cost-effective, capable AI models
 - **LM Studio** for enabling local LLM development
-- **LocalStack** for local AWS development
 - **Deep Chat** for the beautiful chat UI component
+- **Pydantic** for robust data validation
 
 ## 📞 Support
 
@@ -579,6 +590,6 @@ MIT License - feel free to use this for personal or commercial projects!
 
 ---
 
-Built with ❤️ using AWS Lambda, AWS Bedrock, LangChain, LangGraph, and DynamoDB
+Built with ❤️ using AWS Lambda, AWS Bedrock (Nova 2 Lite), LangChain, LangGraph, and DynamoDB
 
 ⭐ Star this repo if you find it useful!

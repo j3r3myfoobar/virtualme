@@ -76,7 +76,7 @@ resource "null_resource" "lambda_dependencies" {
   triggers = {
     requirements = filemd5("${path.module}/../requirements.txt")
     lambda_code  = filemd5("${path.module}/../src/lambda_function.py")
-    resume       = filemd5("${path.module}/../src/resume.md")
+    knowledge_base = filemd5("${path.module}/../src/knowledge_base/resume.md")
   }
 
   provisioner "local-exec" {

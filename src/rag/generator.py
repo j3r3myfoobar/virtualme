@@ -10,8 +10,20 @@ import os
 from typing import Optional
 from langchain_core.messages import HumanMessage
 from langchain_core.language_models import BaseChatModel
+from botocore.config import Config
 
 from config import get_model_config, ModelConfig
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+# Retry configuration for Bedrock API calls
+BEDROCK_RETRY_CONFIG = Config(
+    retries={
+        'max_attempts': 3,
+        'mode': 'adaptive'
+    }
+)
 
 
 # System prompt that defines the chatbot's persona and constraints
@@ -86,11 +98,12 @@ def _get_llm(config: ModelConfig) -> BaseChatModel:
                 "langchain-aws not installed. Install with: pip install langchain-aws"
             )
 
-        print(f"Using Bedrock model: {config.model_id}")
+        logger.info("Using Bedrock model: %s", config.model_id)
 
         return ChatBedrock(
             model_id=config.model_id,
             region_name=config.aws_region,
+            config=BEDROCK_RETRY_CONFIG,
             model_kwargs={
                 "temperature": config.temperature,
                 "max_tokens": config.max_tokens or 2048,
@@ -105,7 +118,7 @@ def _get_llm(config: ModelConfig) -> BaseChatModel:
                 "langchain-openai not installed. Install with: pip install langchain-openai"
             )
 
-        print(f"Using LM Studio model: {config.model_id}")
+        logger.info("Using LM Studio model: %s", config.model_id)
 
         return ChatOpenAI(
             base_url=config.lm_studio_base_url,
@@ -171,7 +184,7 @@ def generate_response(
         HumanMessage(content=f"Question: {question}")
     ]
 
-    print(f"Generating response using {config.backend}...")
+    logger.info("Generating response using %s", config.backend)
     response = llm.invoke(messages)
 
     return response.content
@@ -195,4 +208,4 @@ def update_system_prompt(new_prompt: str) -> None:
         raise ValueError("System prompt must contain {context} placeholder")
 
     SYSTEM_PROMPT = new_prompt
-    print("System prompt updated")
+    logger.info("System prompt updated")

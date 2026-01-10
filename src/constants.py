@@ -11,15 +11,18 @@ from pathlib import Path
 # ==============================================================================
 
 SRC_DIR = Path(__file__).parent
-RESUME_PATH = SRC_DIR / "resume.md"
+KNOWLEDGE_BASE_DIR = SRC_DIR / "knowledge_base"
 PROMPTS_DIR = SRC_DIR / "prompts"
+
+# Legacy single file path (for backward compatibility)
+RESUME_PATH = SRC_DIR / "resume.md"
 
 # ==============================================================================
 # LLM Configuration
 # ==============================================================================
 
 # Default model for production (Bedrock)
-DEFAULT_LLM_MODEL = "mixtral-8x7b"
+DEFAULT_LLM_MODEL = "nova-2-lite"
 
 # Temperature for response generation
 # Lower = more factual/deterministic, Higher = more creative
@@ -34,16 +37,18 @@ DEFAULT_MAX_TOKENS = 2048
 # ==============================================================================
 
 # Maximum length for a single message (characters)
-# Balances user input flexibility vs token cost
-MAX_MESSAGE_LENGTH = 5000
+# 1000 chars is plenty for a question (typical: 50-200 chars)
+MAX_MESSAGE_LENGTH = 1000
 
-# Maximum number of messages in conversation history
-# Prevents context overflow and excessive token usage
-MAX_CONVERSATION_LENGTH = 50
+# Maximum number of messages accepted in request (prevent abuse)
+MAX_CONVERSATION_LENGTH = 100
+
+# Number of recent messages to keep when processing (server-side truncation)
+# Older messages are silently dropped - only last N are used
+CONVERSATION_TRUNCATE_LIMIT = 20
 
 # Warn when conversation history exceeds this threshold
-# May impact response quality due to context length
-CONVERSATION_WARNING_THRESHOLD = 20
+CONVERSATION_WARNING_THRESHOLD = 15
 
 # ==============================================================================
 # RAG Configuration
@@ -67,6 +72,14 @@ MARKDOWN_HEADERS_TO_SPLIT = [
 
 # Default AWS region for resources
 DEFAULT_AWS_REGION = "eu-west-3"
+
+# ==============================================================================
+# Lambda Configuration
+# ==============================================================================
+
+# Minimum time required for RAG pipeline (milliseconds)
+# If remaining Lambda execution time is below this, return 503 to allow retry
+MIN_REMAINING_TIME_MS = 10000
 
 # ==============================================================================
 # CORS Configuration

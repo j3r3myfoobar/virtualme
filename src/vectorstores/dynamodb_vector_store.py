@@ -6,11 +6,24 @@ Stores document embeddings in DynamoDB and performs similarity search
 import os
 import json
 import struct
+import hashlib
 from typing import List, Tuple, Optional
 import boto3
 from boto3.dynamodb.conditions import Attr
+from botocore.config import Config
 
 from constants import DEFAULT_AWS_REGION
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+# Retry configuration for DynamoDB operations
+RETRY_CONFIG = Config(
+    retries={
+        'max_attempts': 3,
+        'mode': 'adaptive'
+    }
+)
 
 
 class DynamoDBVectorStore:
@@ -29,7 +42,7 @@ class DynamoDBVectorStore:
         """
         self.table_name = table_name
         self.region = region
-        self.dynamodb = boto3.resource('dynamodb', region_name=region)
+        self.dynamodb = boto3.resource('dynamodb', region_name=region, config=RETRY_CONFIG)
         self.table = self.dynamodb.Table(table_name)
 
     @staticmethod
@@ -55,7 +68,22 @@ class DynamoDBVectorStore:
 
         return dot_product / (magnitude_a * magnitude_b)
 
-    def add_documents(self, texts: List[str], embeddings: List[List[float]], metadatas: Optional[List[dict]] = None):
+    @staticmethod
+    def _generate_doc_id(text: str, index: int) -> str:
+        """
+        Generate deterministic document ID using SHA256.
+
+        Args:
+            text: Document text content
+            index: Document index in the batch
+
+        Returns:
+            Deterministic ID in format 'doc_{index}_{hash}'
+        """
+        content_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()[:12]
+        return f"doc_{index}_{content_hash}"
+
+    def add_documents(self, texts: List[str], embeddings: List[List[float]], metadatas: Optional[List[dict]] = None) -> None:
         """
         Add documents with embeddings to DynamoDB.
 
@@ -70,34 +98,38 @@ class DynamoDBVectorStore:
         with self.table.batch_writer() as batch:
             for i, (text, embedding, metadata) in enumerate(zip(texts, embeddings, metadatas)):
                 item = {
-                    'id': f'doc_{i}_{hash(text) % 10000}',
+                    'id': self._generate_doc_id(text, i),
                     'text': text,
                     'embedding': self._embedding_to_binary(embedding),
                     'metadata': json.dumps(metadata)
                 }
                 batch.put_item(Item=item)
 
-        print(f"Added {len(texts)} documents to DynamoDB table {self.table_name}")
+        logger.info("Added %d documents to DynamoDB table %s", len(texts), self.table_name)
 
-    def similarity_search(self, query_embedding: List[float], k: int = 3) -> List[Tuple[str, float]]:
+    def similarity_search(self, query_embedding: List[float], k: int = 3, max_items: int = 1000) -> List[Tuple[str, float]]:
         """
         Find k most similar documents using cosine similarity.
 
         Args:
             query_embedding: Query embedding vector
             k: Number of results to return
+            max_items: Maximum items to scan (safety limit, default 1000)
 
         Returns:
             List of (text, similarity_score) tuples
         """
-        # Scan all items (for small datasets this is fine)
+        items = []
         response = self.table.scan()
-        items = response.get('Items', [])
+        items.extend(response.get('Items', []))
 
-        # Handle pagination if needed
-        while 'LastEvaluatedKey' in response:
+        # Handle pagination with early termination at max_items
+        while 'LastEvaluatedKey' in response and len(items) < max_items:
             response = self.table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
             items.extend(response.get('Items', []))
+
+        # Truncate to max_items if exceeded
+        items = items[:max_items]
 
         # Calculate similarities
         results = []
@@ -110,7 +142,7 @@ class DynamoDBVectorStore:
         results.sort(key=lambda x: x[1], reverse=True)
         return [(text, score) for text, score, _ in results[:k]]
 
-    def delete_all(self):
+    def delete_all(self) -> None:
         """Delete all items from the table (useful for reset)."""
         response = self.table.scan()
         items = response.get('Items', [])
@@ -119,7 +151,7 @@ class DynamoDBVectorStore:
             for item in items:
                 batch.delete_item(Key={'id': item['id']})
 
-        print(f"Deleted all items from {self.table_name}")
+        logger.info("Deleted all items from %s", self.table_name)
 
     def count(self) -> int:
         """Return number of documents in the store."""

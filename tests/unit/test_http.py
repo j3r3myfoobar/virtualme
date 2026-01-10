@@ -17,7 +17,7 @@ def test_http_response_success():
     assert response['statusCode'] == 200
     assert 'headers' in response
     assert response['headers']['Content-Type'] == 'application/json'
-    assert response['headers']['Access-Control-Allow-Origin'] == '*'
+    assert 'https://chat.lemaire.tel' in response['headers']['Access-Control-Allow-Origin']
 
     body = json.loads(response['body'])
     assert body['text'] == 'Hello World'

@@ -26,9 +26,9 @@ variable "project_name" {
 }
 
 variable "llm_model" {
-  description = "LLM model identifier for Bedrock (e.g., mixtral-8x7b, llama-3.2-3b)"
+  description = "LLM model identifier for Bedrock (e.g., nova-2-lite, nova-lite, mixtral-8x7b)"
   type        = string
-  default     = "mixtral-8x7b"
+  default     = "nova-2-lite"
 }
 
 variable "embedding_model" {

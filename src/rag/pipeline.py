@@ -9,10 +9,14 @@ from typing import Dict, Any, List
 from langchain_core.messages import AIMessage
 from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
+from langgraph.graph.state import CompiledStateGraph
 
 from .state import GraphState
 from .dynamodb_retriever import get_retriever  # Using DynamoDB instead of FAISS
 from .generator import generate_response
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def retrieve_node(state: GraphState) -> Dict[str, str]:
@@ -40,7 +44,7 @@ def retrieve_node(state: GraphState) -> Dict[str, str]:
     # Format context from retrieved documents
     context = format_context(documents)
 
-    print(f"Retrieved {len(documents)} relevant documents")
+    logger.info("Retrieved %d relevant documents", len(documents))
 
     return {"context": context}
 
@@ -96,7 +100,7 @@ def format_context(documents: List[Document]) -> str:
     ])
 
 
-def build_graph() -> Any:
+def build_graph() -> CompiledStateGraph:
     """
     Construct the LangGraph state machine for RAG workflow.
 
@@ -129,7 +133,7 @@ def build_graph() -> Any:
 _graph = None
 
 
-def get_graph() -> Any:
+def get_graph() -> CompiledStateGraph:
     """
     Get or create the compiled LangGraph workflow.
 
@@ -141,9 +145,9 @@ def get_graph() -> Any:
     global _graph
 
     if _graph is None:
-        print("Building LangGraph workflow...")
+        logger.info("Building LangGraph workflow...")
         _graph = build_graph()
-        print("LangGraph workflow ready")
+        logger.info("LangGraph workflow ready")
 
     return _graph
 
