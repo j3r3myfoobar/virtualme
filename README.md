@@ -190,12 +190,30 @@ For personal use (~100 conversations/month): **~$3-5/month**
 
 ## Testing
 
+### 1. Unit Tests (Mocked)
+Fast, in-memory tests that don't require external services.
 ```bash
-# Run all tests
-python -m pytest tests/ -v
+# Source venv and run pytest
+source .venv/bin/activate
+python3 -m pytest tests/ -v
+```
 
-# Quick local test
-cd src && python lambda_function.py
+### 2. Local Functional Test (LM Studio)
+Tests the actual RAG logic using a local LLM. 
+```bash
+# 1. Install development dependencies
+pip3 install -r requirements-dev.txt
+
+# 2. Start LM Studio (with a model like Ministral 3 14B loaded)
+
+# 3. Run the functional test
+python3 test_local.py
+```
+
+### 3. Bedrock Connectivity Check
+Verifies AWS permissions for Bedrock in `eu-west-3`.
+```bash
+./scripts/verify-bedrock-access.sh
 ```
 
 ---

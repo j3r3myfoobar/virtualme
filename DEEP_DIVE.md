@@ -24,7 +24,325 @@ Implements a **LangGraph** state machine with two nodes:
 
 ---
 
-## 2. Architecture & Lifecycle: Cold vs Warm Start
+## 2. Sequence of Calls with JSON Examples
+
+This section shows the complete request/response flow with examples of JSON payloads exchanged between components.
+
+### Request Flow Diagram
+
+```
+User Input
+    ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Web UI (Deep Chat)                                       │
+│    POST https://api.lemaire.tel/chat                        │
+│    Content-Type: application/json                           │
+└─────────────────────────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 2. Route 53                                                  │
+│    DNS: api.lemaire.tel → API Gateway Endpoint              │
+└─────────────────────────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 3. API Gateway HTTP API                                      │
+│    Transforms HTTP → Lambda Event (API Gateway v2 format)   │
+└─────────────────────────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 4. Lambda (lambda_function.py)                               │
+│    - Validates with Pydantic (ChatRequest)                  │
+│    - Truncates to last 20 messages                          │
+│    - Invokes run_rag_pipeline(question)                     │
+└─────────────────────────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 5. LangGraph Workflow (rag/pipeline.py)                      │
+│    ┌──────────────┐      ┌──────────────┐                  │
+│    │ retrieve_node│ ───► │ generate_node│                  │
+│    └──────────────┘      └──────────────┘                  │
+│           │                      │                          │
+│           ↓                      ↓                          │
+│      DynamoDB              Amazon Bedrock                   │
+└─────────────────────────────────────────────────────────────┘
+    ↓
+Response (reverse path)
+```
+
+### Step 1: Web UI Request (Deep Chat Format)
+
+The Deep Chat UI sends a JSON payload with the conversation history:
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "text": "What is your experience with AWS?"
+    }
+  ]
+}
+```
+
+For conversations with history:
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "text": "What technologies do you work with?"
+    },
+    {
+      "role": "ai",
+      "text": "I work with Python, AWS Lambda, Terraform, and Amazon Bedrock..."
+    },
+    {
+      "role": "user",
+      "text": "Tell me more about your AWS experience"
+    }
+  ]
+}
+```
+
+### Step 2: API Gateway Event (Lambda Input)
+
+API Gateway transforms the HTTP request into a Lambda event (AWS API Gateway v2 format):
+
+```json
+{
+  "version": "2.0",
+  "routeKey": "POST /chat",
+  "rawPath": "/chat",
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "abc123xyz",
+    "domainName": "api.lemaire.tel",
+    "requestId": "abc-123-def-456",
+    "http": {
+      "method": "POST",
+      "path": "/chat",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "203.0.113.42",
+      "userAgent": "Mozilla/5.0..."
+    },
+    "time": "10/Jan/2026:14:23:45 +0000",
+    "timeEpoch": 1736517825000
+  },
+  "headers": {
+    "content-type": "application/json",
+    "host": "api.lemaire.tel",
+    "origin": "https://chat.lemaire.tel"
+  },
+  "body": "{\"messages\":[{\"role\":\"user\",\"text\":\"What is your experience with AWS?\"}]}",
+  "isBase64Encoded": false
+}
+```
+
+### Step 3: Lambda Processing
+
+**Lambda validates and extracts the request:**
+
+```python
+# lambda_function.py
+body = json.loads(event.get("body", "{}"))
+chat_request = ChatRequest(**body)  # Pydantic validation
+
+messages = chat_request.messages
+if len(messages) > 20:
+    messages = messages[-20:]  # Truncate to last 20
+
+question = messages[-1].text
+# "What is your experience with AWS?"
+```
+
+### Step 4: LangGraph Internal State
+
+**LangGraph maintains state through the workflow:**
+
+**Initial State (after retrieve_node):**
+```python
+{
+  "question": "What is your experience with AWS?",
+  "context": "Jeremy Lemaire\n\nAWS Solutions Architect with 8 years of experience...\n\n---\n\nExpertise:\n- AWS Lambda, API Gateway, DynamoDB...\n\n---\n\nCertifications:\n- AWS Certified Solutions Architect Professional",
+  "messages": [
+    HumanMessage(content="You are a helpful assistant representing Jeremy..."),
+    HumanMessage(content="What is your experience with AWS?")
+  ]
+}
+```
+
+**After generate_node:**
+```python
+{
+  "question": "What is your experience with AWS?",
+  "context": "...",  # Same as before
+  "messages": [
+    HumanMessage(content="You are a helpful assistant..."),
+    HumanMessage(content="What is your experience with AWS?"),
+    AIMessage(content="I have 8 years of experience as an AWS Solutions Architect...")
+  ]
+}
+```
+
+### Step 5: DynamoDB Query (Internal)
+
+**Retrieve Node searches DynamoDB:**
+
+The embedding for "What is your experience with AWS?" is computed:
+```python
+query_embedding = [0.123, -0.456, 0.789, ...]  # 1024-dimensional vector
+```
+
+DynamoDB scan retrieves all items and computes cosine similarity client-side:
+```python
+# Results sorted by similarity score
+[
+  {
+    "id": "doc_0_abc123",
+    "text": "Jeremy Lemaire\n\nAWS Solutions Architect with 2 years...",
+    "similarity": 0.87
+  },
+  {
+    "id": "doc_3_def456",
+    "text": "Certifications:\n- AWS Certified Solutions Architect...",
+    "similarity": 0.82
+  },
+  {
+    "id": "doc_1_ghi789",
+    "text": "Technical Skills:\n- Python, Terraform, AWS Lambda...",
+    "similarity": 0.78
+  }
+]
+# Top 3 are concatenated into the context string
+```
+
+### Step 6: Bedrock API Call (Internal)
+
+**Generate Node calls Amazon Bedrock:**
+
+```json
+{
+  "modelId": "us.amazon.nova-lite-v1:0",
+  "messages": [
+    {
+      "role": "user",
+      "content": "You are a Virtual Clone representing Jeremy Lemaire. Answer ONLY using information from the CONTEXT below.\n\nCONTEXT:\nJeremy Lemaire\n\nAWS Solutions Architect with 2 years of experience...\n\n---\n\nCertifications:\n- AWS Certified Solutions Architect Professional"
+    },
+    {
+      "role": "user",
+      "content": "What is your experience with AWS?"
+    }
+  ],
+  "inferenceConfig": {
+    "temperature": 0.1,
+    "maxTokens": 500
+  }
+}
+```
+
+**Bedrock Response:**
+```json
+{
+  "output": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "text": "I have 2 years of experience as an AWS Solutions Architect. I specialize in serverless architectures using services like Lambda, API Gateway, and DynamoDB. I hold the AWS Certified Solutions Architect Professional certification."
+        }
+      ]
+    }
+  },
+  "usage": {
+    "inputTokens": 234,
+    "outputTokens": 47,
+    "totalTokens": 281
+  }
+}
+```
+
+### Step 7: Lambda Response (to API Gateway)
+
+Lambda returns the response in the format expected by API Gateway v2:
+
+```json
+{
+  "statusCode": 200,
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "https://chat.lemaire.tel",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "content-type"
+  },
+  "body": "{\"text\":\"I have 2 years of experience as an AWS Solutions Architect. I specialize in serverless architectures using services like Lambda, API Gateway, and DynamoDB. I hold the AWS Certified Solutions Architect Professional certification.\"}"
+}
+```
+
+### Step 8: HTTP Response (to Web UI)
+
+API Gateway transforms the Lambda response into an HTTP response:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Access-Control-Allow-Origin: https://chat.lemaire.tel
+Content-Length: 234
+
+{
+  "text": "I have 2 years of experience as an AWS Solutions Architect. I specialize in serverless architectures using services like Lambda, API Gateway, and DynamoDB. I hold the AWS Certified Solutions Architect Professional certification."
+}
+```
+
+The Deep Chat UI receives this and displays the `text` field as the AI's response.
+
+### Error Response Examples
+
+**Validation Error (422 Unprocessable Entity):**
+
+When the request body is malformed:
+
+```json
+{
+  "statusCode": 422,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"error\":\"Validation failed\",\"details\":[{\"loc\":[\"messages\",0,\"role\"],\"msg\":\"Input should be 'user' or 'ai'\",\"type\":\"enum\"}]}"
+}
+```
+
+**Bedrock Throttling (503 Service Unavailable):**
+
+When Bedrock rate limits are exceeded:
+
+```json
+{
+  "statusCode": 503,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"error\":\"Service temporarily unavailable\",\"message\":\"ThrottlingException: Rate exceeded\"}"
+}
+```
+
+**Internal Error (500):**
+
+When an unexpected error occurs:
+
+```json
+{
+  "statusCode": 500,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"error\":\"Internal server error\",\"message\":\"An unexpected error occurred\"}"
+}
+```
+
+---
+
+## 3. Architecture & Lifecycle: Cold vs Warm Start
 
 ### Cold Start (~4 seconds)
 Occurs when no active container exists (after ~15 mins inactivity).
@@ -59,7 +377,7 @@ Occurs on subsequent requests to the same container.
 
 ---
 
-## 3. Technical Key Points
+## 4. Technical Key Points
 
 ### DynamoDB and GSI
 Vector search requires comparing the query against **every single document** to determine semantic proximity.
@@ -136,7 +454,7 @@ workflow.add_edge("retrieve", "generate")
 
 ---
 
-## 4. Production Engineering
+## 5. Production Engineering
 
 ### L1 Cold Start Optimization (Execution Environment)
 Strictly speaking, "Cold Start" (full process initialization) only occurs when AWS creates a **new Execution Environment**. This happens on the first request or after ~15 minutes of inactivity.
@@ -196,7 +514,7 @@ These are not random; they are tuned for "Resume QA".
 #### Temperature = 0.1
 *   **Goal**: Determinism.
 *   **Logic**: We want the LLM to act as a **Retrieval Engine**, not a Creative Writer.
-    *   `0.1`: "According to the text, Jeremy worked at AWS." (Fact)
+    *   `0.1`: "According to the text, Jeremy studied AWS." (Fact)
     *   `0.9`: "Jeremy, a cloud wizard, soared through the AWS skies..." (Hallucination risk)
 
 ### AWS Adaptive Retries
@@ -218,7 +536,7 @@ BEDROCK_RETRY_CONFIG = Config(
 
 ---
 
-## 5. Resource Utilization
+## 6. Resource Utilization
 
 ### Lambda Memory Breakdown (512MB)
 The function is configured with **512MB of RAM**. This is a deliberate choice based on actual utilization:
@@ -233,7 +551,7 @@ Using less than 512MB often leads to `Memory Limit Exceeded` during the heavy in
 
 ---
 
-## 6. Data Storage Strategy
+## 7. Data Storage Strategy
 
 ### DynamoDB Schema (What we store)
 We store the **Original Text** alongside the **Vector**. There is no "reverse engineering" of vectors back to text; we simply retrieve the text field that sits next to the winning vector.
@@ -262,7 +580,7 @@ Why does this architecture differ from using specialized tools like Chroma?
 
 ---
 
-## 6. Summary
+## 8. Summary
 **Serverless RAG Architecture**
 - **Compute**: Lambda (pay-per-request).
 - **Storage**: DynamoDB (pay-per-request).

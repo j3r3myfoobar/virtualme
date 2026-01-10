@@ -43,9 +43,22 @@ resource "aws_acm_certificate_validation" "frontend" {
   validation_record_fqdns = [for record in aws_route53_record.frontend_cert_validation : record.fqdn]
 }
 
-# CloudFront Origin Access Identity (for secure S3 access)
+# Temporary: Keep OAI during migration (will be removed in next step)
 resource "aws_cloudfront_origin_access_identity" "frontend" {
-  comment = "OAI for ${local.s3_bucket}"
+  comment = "OAI for ${local.s3_bucket} (migrating to OAC)"
+}
+
+# CloudFront Origin Access Control (modern standard)
+resource "aws_cloudfront_origin_access_control" "frontend" {
+  name                              = "${local.s3_bucket}-oac"
+  description                       = "OAC for ${local.s3_bucket}"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # CloudFront Distribution
@@ -57,12 +70,9 @@ resource "aws_cloudfront_distribution" "frontend" {
   price_class         = "PriceClass_100" # Use only North America and Europe
 
   origin {
-    domain_name = aws_s3_bucket.frontend.bucket_regional_domain_name
-    origin_id   = "S3-${local.s3_bucket}"
-
-    s3_origin_config {
-      origin_access_identity = aws_cloudfront_origin_access_identity.frontend.cloudfront_access_identity_path
-    }
+    domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
+    origin_id                = "S3-${local.s3_bucket}"
+    origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
 
   default_cache_behavior {

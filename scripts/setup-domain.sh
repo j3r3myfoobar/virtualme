@@ -20,9 +20,7 @@ echo "Frontend: https://chat.$DOMAIN"
 echo "API: https://api.$DOMAIN"
 echo ""
 
-###############################################################################
 # Step 1: Get Route53 Hosted Zone ID
-###############################################################################
 
 echo "1. Getting Route53 Hosted Zone ID..."
 ZONE_ID=$(aws route53 list-hosted-zones-by-name \
@@ -38,9 +36,7 @@ fi
 echo "   Route53 Zone ID: $ZONE_ID"
 echo ""
 
-###############################################################################
 # Step 2: Check/Create CloudFront Certificate (us-east-1)
-###############################################################################
 
 echo "2. Checking ACM Certificate for CloudFront (us-east-1)..."
 CERT_ARN_CLOUDFRONT=$(aws acm list-certificates \
@@ -105,9 +101,7 @@ else
 fi
 echo ""
 
-###############################################################################
 # Step 3: Check/Create API Gateway Certificate (eu-west-3)
-###############################################################################
 
 echo "3. Checking ACM Certificate for API Gateway ($REGION_API)..."
 CERT_ARN_API=$(aws acm list-certificates \
@@ -171,9 +165,7 @@ else
 fi
 echo ""
 
-###############################################################################
 # Output terraform.tfvars Configuration
-###############################################################################
 
 echo "==========================================="
 echo "Terraform Configuration"
@@ -197,9 +189,7 @@ environment = "prod"
 EOF
 echo ""
 
-###############################################################################
 # Summary
-###############################################################################
 
 echo "==========================================="
 echo "Summary"
