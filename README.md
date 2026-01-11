@@ -235,4 +235,30 @@ virtualme/
 ```
 
 ---
+
+## Future Enhancements
+
+### AWS Serverless Application Model (AWS SAM)
+
+The project currently uses Terraform for infrastructure as code because I did not know about **AWS SAM**. It seems to bring several benefits:
+
+- **Local Testing**: `sam local start-api` runs API Gateway + Lambda locally without deployment
+- **Built-in Best Practices**: Automatic IAM policies, X-Ray tracing, and API Gateway configuration
+- **Faster Deployments**: Incremental code updates without full Terraform apply
+- **Lambda Layers**: Automatic dependency packaging and layer management
+- **Integrated Debugging**: Step-through debugging with IDE integration
+
+**Trade-offs:**
+- Terraform provides multi-cloud support and broader AWS service coverage
+- SAM is AWS-specific and optimized for serverless workloads only
+- Current Terraform setup works well for this project's scale
+
+**Possible Migration Path:**
+1. Convert `terraform/*.tf` to `template.yaml` (SAM template)
+2. Use `sam deploy --guided` for deployments
+3. Keep CloudFront/Route53 in Terraform (SAM focuses on compute/API layers)
+
+This enhancement would help for  local development.
+
+---
 Built with AWS Lambda, Amazon Bedrock, LangGraph, and DynamoDB

@@ -1,32 +1,8 @@
 # Virtual Me - Technical Deep Dive
 
-## 1. Request Lifecycle
+## 1. Request/Response Flow with JSON Examples
 
-### Step 1: Frontend to API Gateway
-Browser sends `POST /chat` to API Gateway.
-Preflight `OPTIONS` request is handled by `lambda_function.py`, which explicitly returns 200 OK.
-**Reason**: Browsers block cross-origin requests (`chat.lemaire.tel` -> `api.lemaire.tel`) unless origin is explicitly allowed = CORS
-
-### Step 2: Lambda Handler (`lambda_function.py`)
-Lambda processes the JSON event:
-1. **Validation**: Pydantic model (`ChatRequest`) ensures schema validity. Malformed requests fail early.
-2. **Truncation**: Only the last 20 messages are retained (`messages[-20:]`). The goal is to limits token usage and costs. Older context is irrelevant for immediate queries.
-3. **Execution**: Invokes `run_rag_pipeline(question)`.
-
-### Step 3: RAG Pipeline (`rag/pipeline.py`)
-Implements a **LangGraph** state machine with two nodes:
-1. `retrieve`: Fetches documents.
-2. `generate`: Queries LLM.
-
-**State Structure**: `{"question": "...", "context": "...", "messages": [...]}`
-- **Retrieve Node**: Calls `DynamoDBRetriever`, fetches chunks, flattens to context string.
-- **Generate Node**: Injects context into System Prompt, calls Bedrock.
-
----
-
-## 2. Sequence of Calls with JSON Examples
-
-This section shows the complete request/response flow with examples of JSON payloads exchanged between components.
+Here is the complete end-to-end flow from user input to AI response, including actual JSON payloads exchanged between components, CORS handling, validation, RAG pipeline execution, and error cases.
 
 ### Request Flow Diagram
 
@@ -67,6 +43,23 @@ User Input
 └─────────────────────────────────────────────────────────────┘
     ↓
 Response (reverse path)
+```
+
+### CORS Preflight Handling
+
+Before the actual POST request, browsers send a preflight OPTIONS request when making cross-origin calls (`chat.lemaire.tel` → `api.lemaire.tel`). The Lambda function explicitly returns 200 OK with CORS headers to allow the request:
+
+```python
+# lambda_function.py handles OPTIONS preflight
+if event.get("requestContext", {}).get("http", {}).get("method") == "OPTIONS":
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Access-Control-Allow-Origin": "https://chat.lemaire.tel",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "content-type"
+        }
+    }
 ```
 
 ### Step 1: Web UI Request (Deep Chat Format)
@@ -141,24 +134,33 @@ API Gateway transforms the HTTP request into a Lambda event (AWS API Gateway v2 
 
 ### Step 3: Lambda Processing
 
-**Lambda validates and extracts the request:**
+**Lambda validates, truncates, and extracts the request:**
 
 ```python
 # lambda_function.py
 body = json.loads(event.get("body", "{}"))
-chat_request = ChatRequest(**body)  # Pydantic validation
 
+# Validation: Pydantic ensures schema validity. Malformed requests fail early.
+chat_request = ChatRequest(**body)
+
+# Truncation: Only last 20 messages retained to limit token usage and costs.
+# Older context is irrelevant for immediate queries.
 messages = chat_request.messages
 if len(messages) > 20:
-    messages = messages[-20:]  # Truncate to last 20
+    messages = messages[-20:]
 
+# Extract question and invoke RAG pipeline
 question = messages[-1].text
-# "What is your experience with AWS?"
+answer = run_rag_pipeline(question)  # Invokes LangGraph workflow
 ```
 
 ### Step 4: LangGraph Internal State
 
-**LangGraph maintains state through the workflow:**
+**The RAG pipeline (`rag/pipeline.py`) implements a LangGraph state machine with two nodes:**
+- `retrieve_node`: Calls DynamoDBRetriever, fetches chunks, flattens to context string
+- `generate_node`: Injects context into System Prompt, calls Bedrock
+
+**State flows through the workflow:**
 
 **Initial State (after retrieve_node):**
 ```python
@@ -223,7 +225,7 @@ DynamoDB scan retrieves all items and computes cosine similarity client-side:
 
 ```json
 {
-  "modelId": "us.amazon.nova-lite-v1:0",
+  "modelId": "us.amazon.nova-lite-v2:0",
   "messages": [
     {
       "role": "user",
@@ -342,7 +344,7 @@ When an unexpected error occurs:
 
 ---
 
-## 3. Architecture & Lifecycle: Cold vs Warm Start
+## 2. Architecture & Lifecycle: Cold vs Warm Start
 
 ### Cold Start (~4 seconds)
 Occurs when no active container exists (after ~15 mins inactivity).
@@ -377,7 +379,7 @@ Occurs on subsequent requests to the same container.
 
 ---
 
-## 4. Technical Key Points
+## 3. Technical Key Points
 
 ### DynamoDB and GSI
 Vector search requires comparing the query against **every single document** to determine semantic proximity.
@@ -454,7 +456,7 @@ workflow.add_edge("retrieve", "generate")
 
 ---
 
-## 5. Production Engineering
+## 4. Production Engineering
 
 ### L1 Cold Start Optimization (Execution Environment)
 Strictly speaking, "Cold Start" (full process initialization) only occurs when AWS creates a **new Execution Environment**. This happens on the first request or after ~15 minutes of inactivity.
@@ -502,7 +504,7 @@ def lambda_handler(event, context):
 ### RAG Hyperparameters
 These are not random; they are tuned for "Resume QA".
 
-#### Top K = 3 (The "Goldilocks" Zone)
+#### Top K = 3 (The Sweet Spot Zone)
 *   **Why not 1? (Misses Context)**: Markdown splitting often separates headers from content.
     *   *Scenario*: Chunk 1 has `## Experience`. Chunk 2 has `### Company A`.
     *   If we only retrieve Chunk 2, the LLM doesn't know it's "Experience". Retrieving 3 ensures we likely capture the surrounding semantic hierarchy.
@@ -534,9 +536,39 @@ BEDROCK_RETRY_CONFIG = Config(
 )
 ```
 
+### AWS X-Ray Tracing
+
+X-Ray provides distributed tracing showing latency breakdowns for Lambda execution, DynamoDB queries, and Bedrock API calls.
+
+**Current Implementation (Lambda X-Ray Enabled)**:
+```hcl
+# terraform/main.tf
+resource "aws_lambda_function" "virtual_me" {
+  tracing_config {
+    mode = "Active"  # ✅ Enabled
+  }
+}
+```
+
+With Lambda X-Ray enabled, you automatically get traces for:
+- Lambda execution time and cold starts
+- **DynamoDB operations** (Scan queries with latency)
+- **Bedrock API calls** (InvokeModel with token counts and latency)
+- All boto3 SDK calls
+
+**No Python SDK required** - Lambda's X-Ray integration automatically instruments boto3 calls.
+
+**API Gateway Limitation**:
+
+For **HTTP API (v2)** has been used instead of REST API (v1) because:
+- **70% cheaper**: $1.00/million vs $3.50/million requests
+- **Simpler CORS**: Native configuration vs manual OPTIONS handling
+- **Sufficient for this use case**: Simple POST endpoint with no need for API keys or usage plans
+
+Trade-off: HTTP API v2 does **not support X-Ray tracing**. Only Lambda traces are captured.
 ---
 
-## 6. Resource Utilization
+## 5. Resource Utilization
 
 ### Lambda Memory Breakdown (512MB)
 The function is configured with **512MB of RAM**. This is a deliberate choice based on actual utilization:
@@ -551,7 +583,7 @@ Using less than 512MB often leads to `Memory Limit Exceeded` during the heavy in
 
 ---
 
-## 7. Data Storage Strategy
+## 6. Data Storage Strategy
 
 ### DynamoDB Schema (What we store)
 We store the **Original Text** alongside the **Vector**. There is no "reverse engineering" of vectors back to text; we simply retrieve the text field that sits next to the winning vector.
@@ -580,7 +612,7 @@ Why does this architecture differ from using specialized tools like Chroma?
 
 ---
 
-## 8. Summary
+## 7. Summary
 **Serverless RAG Architecture**
 - **Compute**: Lambda (pay-per-request).
 - **Storage**: DynamoDB (pay-per-request).
