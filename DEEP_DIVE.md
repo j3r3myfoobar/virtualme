@@ -456,7 +456,7 @@ workflow.add_edge("retrieve", "generate")
 
 ---
 
-## 4. Production Engineering
+## 4. Few performance tricks
 
 ### L1 Cold Start Optimization (Execution Environment)
 Strictly speaking, "Cold Start" (full process initialization) only occurs when AWS creates a **new Execution Environment**. This happens on the first request or after ~15 minutes of inactivity.
@@ -560,7 +560,7 @@ With Lambda X-Ray enabled, you automatically get traces for:
 
 **API Gateway Limitation**:
 
-For **HTTP API (v2)** has been used instead of REST API (v1) because:
+For **HTTP API (v2)** has been used  instead of REST API (v1) because:
 - **70% cheaper**: $1.00/million vs $3.50/million requests
 - **Simpler CORS**: Native configuration vs manual OPTIONS handling
 - **Sufficient for this use case**: Simple POST endpoint with no need for API keys or usage plans
