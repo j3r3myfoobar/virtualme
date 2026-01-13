@@ -17,28 +17,58 @@ from constants import MIN_REMAINING_TIME_MS, CONVERSATION_TRUNCATE_LIMIT
 logger = get_logger(__name__)
 
 
-def extract_last_user_message(messages: list) -> str:
+def is_meta_question(question: str) -> bool:
     """
-    Extract the last user message from a conversation history.
+    Detect if question is about the chatbot itself (meta question).
+
+    Meta questions ask about how THIS chatbot works, not about Jeremy's projects.
 
     Args:
-        messages: List of message dicts with 'role' and 'text' fields
+        question: User's question text
 
     Returns:
-        The text of the last user message, or empty string if none found
-
-    Example:
-        >>> messages = [{'role': 'user', 'text': 'Hello'}]
-        >>> extract_last_user_message(messages)
-        'Hello'
+        True if this is a meta question about the chatbot
     """
-    # Find last message from user
-    for message in reversed(messages):
-        if message.get('role') == 'user':
-            text = message.get('text', '')
-            return text.strip()
+    question_lower = question.lower()
 
-    return ''
+    # Keywords that indicate asking about the chatbot itself
+    meta_indicators = [
+        'how were you built',
+        'how were you implemented',
+        'how have you been built',
+        'how have you been implemented',
+        'tell me how you have been implemented',
+        'tell me how you were built',
+        'how does this chatbot work',
+        'how does this work',
+        'what technology powers you',
+        'what powers you',
+        'how are you implemented',
+        'what are you built with',
+        'what stack are you using',
+        'how do you work',
+        'explain how you work',
+        'what technology are you using'
+    ]
+
+    return any(indicator in question_lower for indicator in meta_indicators)
+
+
+def get_meta_response() -> str:
+    """
+    Return canned response for meta questions about the chatbot.
+
+    Returns:
+        Explanation of how Virtual Me chatbot works
+    """
+    return (
+        "I'm Virtual Me, a RAG-powered chatbot representing Jeremy Lemaire. "
+        "I'm built with AWS Lambda, DynamoDB vector store, LangGraph orchestration, "
+        "and Amazon Bedrock (Nova 2 Lite model). When you ask a question, I retrieve "
+        "relevant sections from Jeremy's resume using semantic search, then generate "
+        "grounded responses to prevent hallucinations. The full technical breakdown "
+        "is in Jeremy's blog post about this project."
+    )
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -92,18 +122,23 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         logger.info("Processing question: %s...", last_user_message[:100])
 
-        # Check remaining execution time before starting expensive RAG pipeline
-        if context is not None:
-            remaining_ms = context.get_remaining_time_in_millis()
-            if remaining_ms < MIN_REMAINING_TIME_MS:
-                logger.warning("Insufficient time remaining: %dms < %dms", remaining_ms, MIN_REMAINING_TIME_MS)
-                return http_response(503, {
-                    'error': 'Insufficient time remaining',
-                    'retry': True
-                })
+        # Check if this is a meta question about the chatbot itself
+        if is_meta_question(last_user_message):
+            logger.info("Detected meta question - bypassing RAG pipeline")
+            answer = get_meta_response()
+        else:
+            # Check remaining execution time before starting expensive RAG pipeline
+            if context is not None:
+                remaining_ms = context.get_remaining_time_in_millis()
+                if remaining_ms < MIN_REMAINING_TIME_MS:
+                    logger.warning("Insufficient time remaining: %dms < %dms", remaining_ms, MIN_REMAINING_TIME_MS)
+                    error_response = ErrorResponse(
+                        error="Insufficient time remaining for request processing"
+                    )
+                    return http_response(503, error_response.model_dump())
 
-        # Run the RAG pipeline
-        answer = run_rag_pipeline(last_user_message)
+            # Run the RAG pipeline
+            answer = run_rag_pipeline(last_user_message)
 
         logger.info("Generated answer (%d chars)", len(answer))
 
@@ -116,17 +151,18 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     except json.JSONDecodeError as e:
         logger.warning("Invalid JSON: %s", e)
-        return http_response(400, {'error': 'Invalid JSON in request body'})
+        error_response = ErrorResponse(error="Invalid JSON in request body")
+        return http_response(400, error_response.model_dump())
 
     except ValueError as e:
         logger.warning("Validation error: %s", e)
-        return http_response(400, {'error': str(e)})
+        error_response = ErrorResponse(error=str(e))
+        return http_response(400, error_response.model_dump())
 
     except Exception:
         logger.exception("Unexpected error in lambda handler")
-        return http_response(500, {
-            'error': 'Internal server error'
-        })
+        error_response = ErrorResponse(error="Internal server error")
+        return http_response(500, error_response.model_dump())
 
 
 # ============================================================================

@@ -1,11 +1,6 @@
 """Unit tests for validation utilities."""
 
-import sys
-import os
 import pytest
-
-# Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
 
 from utils.validation import validate_not_empty_whitespace, validate_no_null_bytes
 

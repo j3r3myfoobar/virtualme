@@ -2,6 +2,7 @@
 RAG pipeline using LangGraph. Retrieves context then generates response.
 """
 
+from functools import lru_cache
 from typing import Dict, List
 from langchain_core.messages import AIMessage
 from langchain_core.documents import Document
@@ -57,19 +58,13 @@ def build_graph() -> CompiledStateGraph:
 
 
 # Cached graph instance
-_graph = None
-
-
+@lru_cache(maxsize=1)
 def get_graph() -> CompiledStateGraph:
     """Get compiled graph (cached for Lambda cold start)."""
-    global _graph
-
-    if _graph is None:
-        logger.info("Building graph...")
-        _graph = build_graph()
-        logger.info("Graph ready")
-
-    return _graph
+    logger.info("Building graph...")
+    graph = build_graph()
+    logger.info("Graph ready")
+    return graph
 
 
 def run_rag_pipeline(question: str) -> str:

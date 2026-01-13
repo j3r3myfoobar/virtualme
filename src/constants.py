@@ -21,13 +21,13 @@ DEFAULT_MAX_TOKENS = 2048
 # --- Message limits ---
 
 MAX_MESSAGE_LENGTH = 1000  # 1000 chars is plenty for a question
-MAX_CONVERSATION_LENGTH = 100  # reject requests with too many messages
-CONVERSATION_TRUNCATE_LIMIT = 20  # only use last N messages
-CONVERSATION_WARNING_THRESHOLD = 15  # log warning above this
+MAX_CONVERSATION_LENGTH = 100  # reject requests with too many messages (prevents abuse)
+CONVERSATION_TRUNCATE_LIMIT = 20  # only use last N messages (keeps context window manageable, reduces token cost)
+CONVERSATION_WARNING_THRESHOLD = 15  # log warning above this threshold for monitoring
 
 # --- RAG ---
 
-RAG_TOP_K_CHUNKS = 3  # how many chunks to retrieve
+RAG_TOP_K_CHUNKS = 3  # retrieve top 3 most similar chunks (balances context quality vs token cost)
 
 MARKDOWN_HEADERS_TO_SPLIT = [
     ("#", "Header 1"),

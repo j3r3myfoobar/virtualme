@@ -10,7 +10,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src'))
 # Import test modules
 from unit import test_http
 from unit import test_knowledge_base
-from unit import test_lambda_handler
 
 
 def run_all_tests():
@@ -29,11 +28,6 @@ def run_all_tests():
             test_knowledge_base.test_load_knowledge_base,
             test_knowledge_base.test_documents_have_metadata,
             test_knowledge_base.test_documents_have_content,
-        ]),
-        ("Lambda Handler", [
-            test_lambda_handler.test_extract_last_user_message,
-            test_lambda_handler.test_extract_last_user_message_empty,
-            test_lambda_handler.test_extract_last_user_message_whitespace,
         ]),
     ]
 

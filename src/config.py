@@ -4,6 +4,7 @@ Supports Bedrock (production) and LM Studio (local dev).
 """
 
 import os
+from functools import lru_cache
 from typing import Literal, Optional, Dict, Set
 from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -119,15 +120,10 @@ class Settings(BaseSettings):
         return self.aws_default_region or self.aws_region or DEFAULT_AWS_REGION
 
 
-_settings: Optional[Settings] = None
-
-
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Get or create settings instance."""
-    global _settings
-    if _settings is None:
-        _settings = Settings()
-    return _settings
+    """Get or create settings instance (cached)."""
+    return Settings()
 
 
 def _resolve_model_id(alias: str, model_map: Dict[str, str], is_bedrock: bool) -> str:
@@ -182,5 +178,4 @@ def list_available_models(backend: LLMBackend = "bedrock") -> Dict[str, str]:
 
 def reset_settings() -> None:
     """Reset settings cache (for testing)."""
-    global _settings
-    _settings = None
+    get_settings.cache_clear()

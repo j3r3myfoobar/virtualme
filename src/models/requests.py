@@ -6,7 +6,7 @@ Prevents common security issues like injection attacks and oversized payloads.
 """
 
 from typing import List, Literal
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 from constants import (
     MAX_MESSAGE_LENGTH,
@@ -47,15 +47,15 @@ class Message(BaseModel):
         v = validate_not_empty_whitespace(v)
         return validate_no_null_bytes(v)
 
-    class Config:
-        # Pydantic v2 configuration
-        str_strip_whitespace = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        json_schema_extra={
             "example": {
                 "role": "user",
                 "text": "What programming languages do you know?"
             }
         }
+    )
 
 
 class ChatRequest(BaseModel):
@@ -109,14 +109,15 @@ class ChatRequest(BaseModel):
 
         return v
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "messages": [
                     {"role": "user", "text": "What is your main expertise?"}
                 ]
             }
         }
+    )
 
 
 class ChatResponse(BaseModel):
@@ -140,12 +141,13 @@ class ChatResponse(BaseModel):
         """Validate response is not empty."""
         return validate_not_empty_whitespace(v, strip=False)
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "text": "I'm a Senior Software Engineer with expertise in Python, AWS, and distributed systems."
             }
         }
+    )
 
 
 class ErrorResponse(BaseModel):
@@ -173,8 +175,8 @@ class ErrorResponse(BaseModel):
         ]]
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "error": "Invalid request",
                 "details": [
@@ -186,3 +188,4 @@ class ErrorResponse(BaseModel):
                 ]
             }
         }
+    )

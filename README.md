@@ -103,7 +103,7 @@ START → retrieve_node → generate_node → END
 ```bash
 # Clone and setup
 git clone <repo-url> && cd virtualme
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
 # Configure environment
@@ -111,7 +111,7 @@ cp .env.example .env
 # Edit .env with your settings
 
 # Run locally
-cd src && python lambda_function.py
+cd src && python3 lambda_function.py
 ```
 
 ---
@@ -143,7 +143,7 @@ terraform apply
 |----------|---------|-------------|
 | `LLM_BACKEND` | `bedrock` | `bedrock` or `lm_studio` |
 | `LLM_MODEL` | `nova-2-lite` | Model alias (see below) |
-| `LLM_TEMPERATURE` | `0.3` | Response creativity (0.0-1.0) |
+| `LLM_TEMPERATURE` | `0.1` | Response creativity (0.0-1.0, lower = more factual) |
 | `EMBEDDING_MODEL` | `titan-embed-text-v2` | Embedding model |
 | `DYNAMODB_TABLE` | auto | Vector storage table |
 
@@ -194,7 +194,7 @@ For personal use (~100 conversations/month): **~$3-5/month**
 Fast, in-memory tests that don't require external services.
 ```bash
 # Source venv and run pytest
-source .venv/bin/activate
+source venv/bin/activate
 python3 -m pytest tests/ -v
 ```
 

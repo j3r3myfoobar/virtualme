@@ -5,12 +5,8 @@ Tests the generator functionality including response generation,
 input validation, and LLM backend configuration.
 """
 
-import sys
-import os
 import pytest
 from unittest.mock import MagicMock, patch
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
 
 from rag.generator import generate_response, _get_llm, SYSTEM_PROMPT
 from config import ModelConfig

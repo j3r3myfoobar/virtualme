@@ -64,8 +64,11 @@ if event.get("requestContext", {}).get("http", {}).get("method") == "OPTIONS":
 
 ### Step 1: Web UI Request (Deep Chat Format)
 
-The Deep Chat UI sends a JSON payload with the conversation history:
+**Critical Architecture Decision: Client-Side State Management**
 
+The Lambda backend is **completely stateless**. All conversation history is maintained client-side by the Deep Chat UI and sent with **every request**.
+
+**First message:**
 ```json
 {
   "messages": [
@@ -77,8 +80,7 @@ The Deep Chat UI sends a JSON payload with the conversation history:
 }
 ```
 
-For conversations with history:
-
+**Third message in conversation (includes full history):**
 ```json
 {
   "messages": [
@@ -97,6 +99,14 @@ For conversations with history:
   ]
 }
 ```
+
+**Why client-side state?**
+- **Zero backend storage cost** - No database for session management
+- **Instant scaling** - Each request is independent, no session affinity needed
+- **Simplicity** - Lambda function has no state to manage or persist
+- **Privacy** - Conversation data never stored on server (only processed in-memory during request)
+
+**Trade-off**: Each request includes growing conversation history, but this is mitigated by the 20-message truncation limit (see Step 3).
 
 ### Step 2: API Gateway Event (Lambda Input)
 
@@ -131,6 +141,8 @@ API Gateway transforms the HTTP request into a Lambda event (AWS API Gateway v2 
   "isBase64Encoded": false
 }
 ```
+
+**Note**: This is a simplified example. Actual events include additional fields (`rawQueryString`, `domainPrefix`, `stage`), the path includes the stage name (e.g., `/prod/chat`), and browsers send many more headers (`accept-encoding`, `cache-control`, `sec-fetch-*`, `referer`, `x-forwarded-*`, etc.).
 
 ### Step 3: Lambda Processing
 

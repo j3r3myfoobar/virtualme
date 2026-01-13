@@ -2,7 +2,7 @@
 Basic tests for the Virtual Me RAG chatbot.
 
 Simple, readable tests that demonstrate how the system works.
-Run with: python -m pytest tests/test_basic.py -v
+Run with: python3 -m pytest tests/test_basic.py -v
 """
 
 import sys
