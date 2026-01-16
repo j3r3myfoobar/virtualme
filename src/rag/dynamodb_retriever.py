@@ -59,14 +59,29 @@ def _initialize_vector_store() -> DynamoDBVectorStore:
     table_name = os.environ.get('DYNAMODB_TABLE', 'virtual-me-vectors-prod')
     region = os.environ.get('AWS_DEFAULT_REGION', DEFAULT_AWS_REGION)
 
-    logger.info("Initializing retriever...")
+    logger.info("Initializing vector store (table: %s, region: %s)", table_name, region)
     vector_store = DynamoDBVectorStore(table_name=table_name, region=region)
 
-    if vector_store.count() == 0:
-        logger.info("Vector store empty, initializing...")
-        _populate_vector_store(vector_store)
+    count = vector_store.count()
+    logger.info("Vector store has %d vectors", count)
+
+    if count == 0:
+        error_msg = (
+            "Vector store is empty! Please populate it manually:\n"
+            "  cd /Users/jeremy/Developer/Projects/virtualme\n"
+            "  python3 scripts/populate-vectors.py\n"
+            "Auto-population is disabled because it times out and produces incomplete results (133 vs 145 expected)."
+        )
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+    elif count < 145:
+        logger.warning(
+            "Vector store has only %d vectors (expected 145). "
+            "This may cause incorrect answers. Run populate-vectors.py to fix.",
+            count
+        )
     else:
-        logger.info("Vector store ready (%d vectors)", vector_store.count())
+        logger.info("Vector store ready with %d vectors", count)
 
     return vector_store
 
@@ -85,13 +100,45 @@ class DynamoDBRetriever:
         self.top_k = top_k
 
     def get_relevant_documents(self, query: str) -> List[Document]:
-        """Find the most relevant documents for a query."""
+        """
+        Find the most relevant documents for a query.
+
+        Fetches more candidates than needed and re-ranks to prioritize resume content
+        when the query appears to be about personal experience/skills.
+        """
         query_embedding = self.embeddings.embed_query(query)
-        results = self.vector_store.similarity_search(query_embedding, k=self.top_k)
+
+        # Fetch 2-3x more candidates for re-ranking
+        fetch_k = self.top_k * 3
+        results = self.vector_store.similarity_search(query_embedding, k=fetch_k)
+
+        # Re-rank: boost resume chunks for personal questions
+        query_lower = query.lower()
+        is_personal_question = any(keyword in query_lower for keyword in [
+            'you', 'your', 'experience', 'background', 'manage', 'lead', 'led',
+            'team', 'skills', 'certifications', 'education', 'projects', 'worked'
+        ])
+
+        if is_personal_question:
+            # Boost resume chunks by adding bonus to their score
+            boosted_results = []
+            for text, score, metadata in results:
+                boost = 0.15 if metadata.get('source_type') == 'resume' else 0.0
+                boosted_results.append((text, score + boost, metadata))
+
+            # Re-sort by boosted score
+            boosted_results.sort(key=lambda x: x[1], reverse=True)
+            results = boosted_results[:self.top_k]
+        else:
+            # Use original ranking for non-personal questions
+            results = results[:self.top_k]
 
         return [
-            Document(page_content=text, metadata={"score": score})
-            for text, score in results
+            Document(
+                page_content=text,
+                metadata={**metadata, "score": score}
+            )
+            for text, score, metadata in results
         ]
 
 

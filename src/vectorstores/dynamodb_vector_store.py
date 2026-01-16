@@ -125,11 +125,14 @@ class DynamoDBVectorStore:
         for item in items:
             doc_embedding = self._binary_to_embedding(item['embedding'].value)
             similarity = self._cosine_similarity(query_embedding, doc_embedding)
-            results.append((item['text'], similarity, item.get('metadata', '{}')))
+            # Parse metadata JSON string to dict
+            import json
+            metadata = json.loads(item.get('metadata', '{}'))
+            results.append((item['text'], similarity, metadata))
 
-        # Sort by similarity (highest first) and return top k
+        # Sort by similarity (highest first) and return top k with metadata
         results.sort(key=lambda x: x[1], reverse=True)
-        return [(text, score) for text, score, _ in results[:k]]
+        return results[:k]
 
     def delete_all(self) -> None:
         """Delete all items from the table (useful for reset)."""

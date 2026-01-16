@@ -103,9 +103,11 @@ def _load_markdown_file(file_path: Path) -> List[Document]:
 
     splits = markdown_splitter.split_text(content)
 
-    # Add source file to metadata
+    # Add source file and source type to metadata
     for doc in splits:
         doc.metadata['source'] = file_path.name
+        # Tag resume files vs blog posts for better retrieval
+        doc.metadata['source_type'] = 'resume' if 'resume' in file_path.name.lower() else 'blog'
 
     logger.info("Loaded %s: %d chunks", file_path.name, len(splits))
     return splits

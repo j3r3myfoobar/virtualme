@@ -64,8 +64,8 @@ locals {
 resource "null_resource" "lambda_dependencies" {
   triggers = {
     requirements   = filemd5("${path.module}/../requirements.txt")
-    lambda_code    = filemd5("${path.module}/../src/lambda_function.py")
-    knowledge_base = filemd5("${path.module}/../src/knowledge_base/resume.md")
+    src_code       = sha256(join("", [for f in fileset("${path.module}/../src", "**/*.py") : filemd5("${path.module}/../src/${f}")]))
+    knowledge_base = sha256(join("", [for f in fileset("${path.module}/../src/knowledge_base", "**/*.md") : filemd5("${path.module}/../src/knowledge_base/${f}")]))
   }
 
   # Build with Docker to get Linux-compatible binaries
